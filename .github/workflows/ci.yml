@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore FEB.EventSourcing.sln
+
+      - name: Build
+        run: dotnet build FEB.EventSourcing.sln -c Release --no-restore
+
+      # The integration tests start MongoDB (single-node replica set), Redis, PostgreSQL
+      # and SQL Server through Testcontainers; Docker is available on GitHub-hosted runners.
+      - name: Test (coverage gate 85 % line)
+        run: >
+          dotnet test src/FEB.EventSourcing.Tests/FEB.EventSourcing.Tests.csproj
+          -c Release --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          /p:CollectCoverage=true
+          /p:CoverletOutputFormat=cobertura
+          /p:CoverletOutput=../../coverage/
+          /p:Include="[FEB.EventSourcing*]*"
+          /p:Threshold=85
+          /p:ThresholdType=line
+          /p:ThresholdStat=total
+
+      # Packs every package and builds an application that consumes them from a local
+      # feed — catches packaging defects that project-reference builds cannot see.
+      - name: Package smoke test
+        run: ./scripts/package-smoke-test.sh
+
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            src/FEB.EventSourcing.Tests/TestResults/*.trx
+            coverage/
+          if-no-files-found: ignore

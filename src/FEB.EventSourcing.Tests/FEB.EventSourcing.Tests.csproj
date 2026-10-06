@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="6.0.4">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="coverlet.msbuild" Version="6.0.4">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="AwesomeAssertions" Version="9.6.0" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+        <PackageReference Include="Testcontainers.MongoDb" Version="4.1.0" />
+        <PackageReference Include="Testcontainers.Redis" Version="4.1.0" />
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.1.0" />
+        <PackageReference Include="Testcontainers.MsSql" Version="4.1.0" />
+        <PackageReference Include="xunit" Version="2.5.3" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FEB.EventSourcing.Abstractions\FEB.EventSourcing.Abstractions.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing\FEB.EventSourcing.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing.InMemory\FEB.EventSourcing.InMemory.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing.Snapshots\FEB.EventSourcing.Snapshots.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing.MongoDb\FEB.EventSourcing.MongoDb.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing.Redis\FEB.EventSourcing.Redis.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing.TestKit\FEB.EventSourcing.TestKit.csproj" />
+        <ProjectReference Include="..\FEB.Cqrs\FEB.Cqrs.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing.Sql\FEB.EventSourcing.Sql.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing.Postgres\FEB.EventSourcing.Postgres.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing.SqlServer\FEB.EventSourcing.SqlServer.csproj" />
+
+        <!-- Generator: as an analyzer (for the TestDomain aggregates) AND as an assembly reference (for the GeneratorDriver tests) -->
+        <ProjectReference Include="..\FEB.EventSourcing.Snapshots.Generator\FEB.EventSourcing.Snapshots.Generator.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="true" />
+    </ItemGroup>
+
+</Project>

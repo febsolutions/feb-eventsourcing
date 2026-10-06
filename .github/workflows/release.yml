@@ -1,0 +1,74 @@
+name: Release
+
+# Publishes all packages to nuget.org when a version tag is pushed.
+# Tag name = package version, optionally prefixed with "v": 9.2.1, v9.3.0, 9.3.0-beta.1
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+*'
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: write   # create the GitHub release
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Holds the NUGET_API_KEY secret; add required reviewers to the environment to make
+    # every release an explicit approval.
+    environment: nuget
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' is not a version (expected 1.2.3 or 1.2.3-beta.1)."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: dotnet build FEB.EventSourcing.sln -c Release -p:Version="$VERSION"
+
+      - name: Test (coverage gate 85 % line)
+        run: >
+          dotnet test src/FEB.EventSourcing.Tests/FEB.EventSourcing.Tests.csproj
+          -c Release --no-build
+          /p:CollectCoverage=true
+          /p:Include="[FEB.EventSourcing*]*"
+          /p:Threshold=85
+          /p:ThresholdType=line
+          /p:ThresholdStat=total
+
+      # Packs with the release version into artifacts/packages and verifies the packages
+      # by consuming them — only verified packages are published.
+      - name: Pack and smoke test
+        run: ./scripts/package-smoke-test.sh "$VERSION"
+
+      - name: Publish to nuget.org
+        # Symbol packages (.snupkg) next to the .nupkg files are pushed automatically.
+        # --skip-duplicate: re-running a release never overwrites a published version.
+        run: >
+          dotnet nuget push "artifacts/packages/*.nupkg"
+          --source https://api.nuget.org/v3/index.json
+          --api-key "${{ secrets.NUGET_API_KEY }}"
+          --skip-duplicate
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRERELEASE=""
+          [[ "$VERSION" == *-* ]] && PRERELEASE="--prerelease"
+          gh release create "$GITHUB_REF_NAME" artifacts/packages/*.nupkg \
+            --title "$VERSION" --generate-notes $PRERELEASE

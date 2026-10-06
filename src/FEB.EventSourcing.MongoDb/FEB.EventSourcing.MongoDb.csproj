@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+		<Description>MongoDB persistence for FEB.EventSourcing (events, snapshots, outbox). Runs on standalone servers; optional multi-document transactions on replica sets.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="K4os.Compression.LZ4" Version="1.3.8" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
+        <PackageReference Include="MongoDB.Driver" Version="3.5.2" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\FEB.EventSourcing.Abstractions\FEB.EventSourcing.Abstractions.csproj" />
+      <ProjectReference Include="..\FEB.EventSourcing.StateContracts\FEB.EventSourcing.StateContracts.csproj" />
+      <ProjectReference Include="..\FEB.EventSourcing.Snapshots\FEB.EventSourcing.Snapshots.csproj" />
+      <ProjectReference Include="..\FEB.EventSourcing\FEB.EventSourcing.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+      <InternalsVisibleTo Include="FEB.EventSourcing.Tests" />
+    </ItemGroup>
+</Project>

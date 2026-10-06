@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+		<Description>Prometheus metrics for FEB.EventSourcing: reads, writes and latencies per aggregate and store layer.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="prometheus-net" Version="8.2.1" />
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\FEB.EventSourcing.Abstractions\FEB.EventSourcing.Abstractions.csproj" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <Description>Aggregate state contracts shared by snapshotting and caching ([AutoSnapshot], [IgnoreSnapshot], snapshot metadata and serializers). Includes the fail-closed snapshot source generator.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Attributes and generator belong together: whoever uses [AutoSnapshot] gets the
+             generator. Inside this repository it runs through this project reference; package
+             consumers get it from analyzers/dotnet/cs (see PackSnapshotGenerator below).
+             PrivateAssets=all: the generator is never a package dependency of its own. -->
+        <ProjectReference
+                Include="..\FEB.EventSourcing.Snapshots.Generator\FEB.EventSourcing.Snapshots.Generator.csproj"
+                OutputItemType="Analyzer"
+                ReferenceOutputAssembly="false"
+                PrivateAssets="all"
+        />
+    </ItemGroup>
+
+    <PropertyGroup>
+        <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackSnapshotGenerator</TargetsForTfmSpecificContentInPackage>
+    </PropertyGroup>
+
+    <!-- Ships the source generator inside this package. Without it, applications consuming
+         the NuGet packages get [AutoSnapshot] but no generated snapshot code. -->
+    <Target Name="PackSnapshotGenerator">
+        <MSBuild Projects="..\FEB.EventSourcing.Snapshots.Generator\FEB.EventSourcing.Snapshots.Generator.csproj"
+                 Targets="GetTargetPath"
+                 Properties="Configuration=$(Configuration)"
+                 RemoveProperties="TargetFramework">
+            <Output TaskParameter="TargetOutputs" ItemName="_SnapshotGeneratorAssembly" />
+        </MSBuild>
+        <ItemGroup>
+            <TfmSpecificPackageFile Include="@(_SnapshotGeneratorAssembly)" PackagePath="analyzers/dotnet/cs" />
+        </ItemGroup>
+    </Target>
+
+</Project>

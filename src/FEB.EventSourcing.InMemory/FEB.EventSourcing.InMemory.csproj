@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <Description>In-memory persistence for FEB.EventSourcing with the same optimistic-concurrency semantics as the database providers. For tests and local development.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\FEB.EventSourcing.Abstractions\FEB.EventSourcing.Abstractions.csproj" />
+    </ItemGroup>
+
+</Project>

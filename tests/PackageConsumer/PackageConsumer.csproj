@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Package smoke test: consumes the *packed* packages the way an application does.
+       Deliberately not part of FEB.EventSourcing.sln. Run via scripts/package-smoke-test.sh. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- A generator crash is only a warning (CS8785) by default; here it must fail the run. -->
+    <WarningsAsErrors>CS8785</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Only a persistence package, on purpose: the snapshot source generator ships inside
+         FEB.EventSourcing.StateContracts and must reach the application transitively
+         (Postgres -> Sql -> StateContracts), which is the hardest path. -->
+    <PackageReference Include="FEB.EventSourcing.Postgres" Version="$(FebVersion)" />
+  </ItemGroup>
+
+</Project>

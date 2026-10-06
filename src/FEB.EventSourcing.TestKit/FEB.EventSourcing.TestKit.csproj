@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <Description>Test helpers for FEB.EventSourcing: snapshot contract roundtrip assertions for all [AutoSnapshot] aggregates.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FEB.EventSourcing.Abstractions\FEB.EventSourcing.Abstractions.csproj" />
+        <ProjectReference Include="..\FEB.EventSourcing.StateContracts\FEB.EventSourcing.StateContracts.csproj" />
+    </ItemGroup>
+
+</Project>

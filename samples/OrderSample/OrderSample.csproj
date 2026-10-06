@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\FEB.EventSourcing.Abstractions\FEB.EventSourcing.Abstractions.csproj" />
+        <ProjectReference Include="..\..\src\FEB.EventSourcing\FEB.EventSourcing.csproj" />
+        <ProjectReference Include="..\..\src\FEB.EventSourcing.InMemory\FEB.EventSourcing.InMemory.csproj" />
+        <ProjectReference Include="..\..\src\FEB.EventSourcing.Snapshots\FEB.EventSourcing.Snapshots.csproj" />
+        <ProjectReference Include="..\..\src\FEB.EventSourcing.StateContracts\FEB.EventSourcing.StateContracts.csproj" />
+        <ProjectReference Include="..\..\src\FEB.EventSourcing.MongoDb\FEB.EventSourcing.MongoDb.csproj" />
+        <ProjectReference Include="..\..\src\FEB.EventSourcing.Redis\FEB.EventSourcing.Redis.csproj" />
+
+        <!-- The source generator creates snapshot DTOs for [AutoSnapshot] aggregates -->
+        <ProjectReference Include="..\..\src\FEB.EventSourcing.Snapshots.Generator\FEB.EventSourcing.Snapshots.Generator.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false" />
+    </ItemGroup>
+
+</Project>

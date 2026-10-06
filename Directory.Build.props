@@ -1,0 +1,46 @@
+<Project>
+
+  <!-- Shared package metadata for every FEB.EventSourcing package. Per-project files
+       only carry what differs (Description, dependencies). -->
+  <PropertyGroup>
+    <Authors>FEB Solutions</Authors>
+    <Company>FEB Solutions</Company>
+    <Product>FEB.EventSourcing</Product>
+    <Copyright>Copyright © 2025-2026 FEB Solutions</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/febsolutions/feb-eventsourcing</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/febsolutions/feb-eventsourcing</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>event-sourcing;cqrs;ddd;aggregate;outbox;snapshots;mongodb;postgresql;sqlserver;redis</PackageTags>
+
+    <!-- Local builds are clearly not releases; the release workflow passes -p:Version from the tag. -->
+    <Version>0.0.0-local</Version>
+
+    <!-- Source Link (built into the .NET SDK): debuggers can step into the exact sources. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- Every package ships its README for the nuget.org page. -->
+  <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)/README.md')">
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)/README.md')">
+    <None Include="$(MSBuildProjectDirectory)/README.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+
+  <!-- Dependencies between our own packages must not hide analyzers: the snapshot
+       source generator ships inside FEB.EventSourcing.StateContracts and has to reach
+       an application that only references, say, FEB.EventSourcing.MongoDb. NuGet's
+       default (PrivateAssets=analyzers;build) would write exclude="Build,Analyzers"
+       onto every package dependency and silently drop the generator. -->
+  <ItemDefinitionGroup>
+    <ProjectReference>
+      <PrivateAssets>none</PrivateAssets>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+
+</Project>

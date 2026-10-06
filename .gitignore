@@ -1,0 +1,15 @@
+# Build output, everywhere (src/, samples/, tests/, future folders)
+**/bin/
+**/obj/
+
+# IDE
+**/.vs
+**/.idea
+**/*.sln.DotSettings.user
+
+# Test and coverage output
+coverage/
+TestResults/
+
+# Packed packages and package smoke-test caches
+artifacts/
