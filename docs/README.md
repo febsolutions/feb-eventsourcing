@@ -23,6 +23,7 @@ Read in order the first time; each chapter is self-contained afterwards.
 | 9 | [Generator reference](generator-reference.md) | what is generated, supported types, all ASG diagnostics with examples |
 | 10 | [Testing](testing.md) | aggregate unit tests, InMemory store, TestKit contract assertions, Testcontainers, outbox subscribers |
 | 11 | [Upgrade guide](upgrade-guide.md) | breaking changes per version and recommended follow-ups |
+| 12 | [Architecture decisions](decisions/README.md) | why the framework is built the way it is: each guardrail with its context, the decision and its consequences |
 
 ## Choosing a persistence
 

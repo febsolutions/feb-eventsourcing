@@ -57,33 +57,46 @@ configuration updates the documentation in the same pull request:
 | testing | `docs/testing.md` |
 
 Breaking changes (signatures, registration API, data layout, behaviour with migration
-consequences) additionally get a numbered entry in `docs/upgrade-guide.md`. Package
+consequences) additionally get a numbered entry in `docs/upgrade-guide.md`.
+A new architectural decision — or a change to an existing one — gets a document in
+`docs/decisions/` (see its README for the format). Package
 READMEs and XML documentation on public APIs are kept current as well. Code snippets in
 the documentation come from `samples/OrderSample` or the test suite — never code that
 is not compiled anywhere.
 
 ## Architecture guardrails
 
-These are deliberate design decisions. Changing one needs a discussion in an issue
-first.
+These are deliberate design decisions; each links to the
+[architecture decision](docs/decisions/README.md) that explains it. Changing one needs
+a discussion in an issue first and, if accepted, a new decision document that
+supersedes the old one.
 
 - **Optimistic concurrency is the only correctness anchor.** Caches and snapshots are
   optimizations and may be stale; everything must stay correct without them.
+  ([0001](docs/decisions/0001-optimistic-concurrency-is-the-correctness-anchor.md))
 - **No replica set required.** MongoDB code must work on standalone servers;
   consistency comes from the unique index plus self-healing. Multi-document
   transactions are strictly opt-in (`UseTransactions()`).
+  ([0007](docs/decisions/0007-mongodb-without-replica-set.md))
 - **The store chain is ordered by `EventStoreLayer.Order`**, never by call order.
+  ([0008](docs/decisions/0008-store-chain-ordered-by-layer.md))
 - **Snapshots and the Redis cache are independent modules**; they share only
   `FEB.EventSourcing.StateContracts`.
+  ([0002](docs/decisions/0002-separate-snapshots-and-state-cache.md))
 - **The snapshot generator is fail-closed**: every member is mapped, marked
   `[IgnoreSnapshot]`, or a compile error. New diagnostics get an entry in
   `docs/generator-reference.md` and a `GeneratorDriver` test.
+  ([0004](docs/decisions/0004-fail-closed-snapshot-generator.md))
 - **The generator targets netstandard2.0 and Roslyn 4.8**, so it loads in every IDE
-  and build host.
+  and build host, and it **ships inside `FEB.EventSourcing.StateContracts`**.
+  ([0004](docs/decisions/0004-fail-closed-snapshot-generator.md),
+  [0014](docs/decisions/0014-generator-ships-in-statecontracts.md))
 - **The outbox is at-least-once and tracked per subscriber.** Subscriber names are
   persistence keys: stable, without `.`, `$` or whitespace.
-- **`Version` stays `int`.**
+  ([0009](docs/decisions/0009-outbox-named-subscribers.md))
+- **`Version` stays `int`.** ([0011](docs/decisions/0011-version-stays-int.md))
 - **No AppDomain scanning** for registrations; explicit assemblies and modules only.
+  ([0005](docs/decisions/0005-explicit-registration-no-appdomain-scans.md))
 
 ## License
 
