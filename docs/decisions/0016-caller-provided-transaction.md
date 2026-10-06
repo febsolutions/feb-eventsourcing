@@ -1,7 +1,7 @@
 # 0016 — Relational stores can join a transaction provided by the caller
 
 - **Status:** Accepted
-- **Date:** 2026-10-06
+- **Date:** 2026-10-06 · amended 2026-10-06 (review: completion, aborted transactions, EF Core execution strategy, lifecycle)
 
 ## Context
 
@@ -30,6 +30,12 @@ whose tables stay in place:
 
 All required writes live in **one database**. A single local transaction can cover them,
 provided the store can use the caller's connection and transaction.
+
+This requires **explicit transactions** in the application. An application that relies on
+the implicit transaction of each `SaveChanges` call has to move every affected write path
+to `BeginTransactionAsync` (and, with `EnableRetryOnFailure`, into the execution strategy —
+see below). That change per write path is the main effort of introducing event sourcing
+this way.
 
 ## Decision
 
@@ -80,6 +86,17 @@ other unit of work is active in the scope (no nesting), and that the connection 
 the configured database (database name). Otherwise it throws — events must never land
 silently in a different database.
 
+**Completion.** `CompletedAsync` never throws: the deferred actions are post-commit work
+(cache writes, enqueueing background snapshots); a failing action is logged and the next
+one runs. Called without an active unit of work it is a no-op with a warning.
+
+**Lifecycle within a scope.** "No nesting" forbids *concurrent* units of work in one scope,
+not *consecutive* ones: after `CompletedAsync` or `Discarded()` the same scope may join
+again — bulk operations typically run one unit of work per aggregate in a loop. If the scope
+ends while a unit of work is still active (the caller forgot to complete it), the unit logs
+a warning and discards itself; deferred actions are dropped, because whether the caller
+committed is unknown.
+
 **Ownership.** A unit of work belongs to the flow that joined it. Anything that runs
 later or concurrently — background snapshot writes, `AfterCommitAsync` actions — runs
 only after `CompletedAsync`, when the unit is no longer active, and opens its own
@@ -90,23 +107,36 @@ Usage with EF Core (same `Microsoft.Data.SqlClient` connection as the SQL Server
 dialect, so it can be shared directly):
 
 ```csharp
-await using var tx = await db.Database.BeginTransactionAsync(ct);
-uow.Join(db.Database.GetDbConnection(), tx.GetDbTransaction());
-try
+// With EnableRetryOnFailure, EF Core refuses user-initiated transactions outside its
+// execution strategy. The whole block is then retried on transient errors — loading and
+// saving the aggregate included, which matches the retry needed for concurrency conflicts.
+var strategy = db.Database.CreateExecutionStrategy();
+await strategy.ExecuteAsync(async () =>
 {
-    await db.SaveChangesAsync(ct);                 // existing table write
-    await handler.HandleAsync(command, ct);        // load → aggregate → SaveAsync
-    await tx.CommitAsync(ct);
-    await uow.CompletedAsync(ct);                  // runs the AfterCommitAsync actions
-}
-catch
-{
-    await tx.RollbackAsync(ct);
-    uow.Discarded();
-    throw;
-}
+    db.ChangeTracker.Clear();                          // every attempt starts clean
+
+    await using var tx = await db.Database.BeginTransactionAsync(ct);
+    uow.Join(db.Database.GetDbConnection(), tx.GetDbTransaction());
+    try
+    {
+        await db.SaveChangesAsync(ct);                 // existing table write
+        await handler.HandleAsync(command, ct);        // load → aggregate → SaveAsync
+        await tx.CommitAsync(ct);
+    }
+    catch
+    {
+        uow.Discarded();
+        try { await tx.RollbackAsync(ct); }
+        catch { /* the database may already have aborted the transaction */ }
+        throw;
+    }
+
+    await uow.CompletedAsync(ct);                      // after the commit; never throws
+});
 ```
 
+`CompletedAsync` is deliberately called **after** the `try`: once the transaction has
+committed, nothing may lead to a rollback attempt or hide the original exception.
 A small helper (`ExecuteInUnitOfWorkAsync`) may wrap this pattern; it is not required.
 
 ### 2. Behaviour of the relational persistence when a unit of work is active
@@ -125,6 +155,12 @@ A small helper (`ExecuteInUnitOfWorkAsync`) may wrap this pattern; it is not req
   `ConcurrencyException<TId>` as well, inside and outside a unit of work, so the
   caller's retry logic applies. Dialects recognise them (`ISqlDialect.IsConcurrencyConflict`,
   a default-implemented member).
+- **The caller's transaction after a conflict:** only the version-check conflict (zero rows
+  updated) leaves it fully usable. After a database-level error it may already be aborted —
+  PostgreSQL aborts a transaction on any error (the unique violation of the second guard
+  included); SQL Server has already rolled it back after a deadlock or a snapshot update
+  conflict. After a `ConcurrencyException` the caller may therefore only roll back, and that
+  rollback must tolerate an already-aborted transaction (see the example above).
 - **Reads** (`LoadEventsAsync`, `IsExistsAsync`, `GetAllIdsAsync`, snapshot loads) also
   use the unit of work's connection and transaction. Reading through a second connection
   would not see the unit's own uncommitted events and, on SQL Server without row
@@ -144,7 +180,11 @@ Without an active unit of work everything behaves exactly as today.
 - Projection writers may inject `ISqlUnitOfWork` and write through
   `Connection`/`Transaction` (ADO.NET, Dapper).
 - Projection writers may inject the application's scoped `DbContext` when the unit of
-  work was joined from that context — it is already enlisted.
+  work was joined from that context — it is already enlisted. Such a writer must call
+  `SaveChangesAsync` itself, otherwise its changes are written by the caller's next
+  `SaveChanges` or not at all; its entities also share the caller's change tracker. For
+  shadow tables during the introduction, plain SQL or Dapper through
+  `ISqlUnitOfWork.Connection`/`Transaction` is the better choice.
 - If a projection throws, the exception propagates; the caller rolls back, so neither
   the table write nor the events nor the envelopes nor any projection row remain. The
   "stored but not projected" state of 0015 cannot occur inside a unit of work.
@@ -196,6 +236,10 @@ of work internally around `SaveAsync`. This is a separate, opt-in step
   configuration during the shadow phase.
 - Longer transactions: event, envelope and projection writes now hold the caller's
   locks longer. Batch operations should use one unit of work per aggregate.
+- Database-level conflicts (serialization failure, snapshot update conflict, deadlock
+  victim) are now reported as `ConcurrencyException<TId>` also **without** a unit of work.
+  Callers that caught the provider's exception for these cases see a different type — a
+  behaviour change listed in the upgrade guide.
 - Only relational providers support this. MongoDB is out of scope.
 - Envelopes get their creation time when they are inserted but become visible to the
   outbox worker only at commit. With long transactions, delivery order **across**
@@ -215,7 +259,7 @@ of work internally around `SaveAsync`. This is a separate, opt-in step
 1. Caller commits: table row, events, version, envelopes and projection rows exist.
 2. Caller rolls back after `SaveAsync`: none of them exist.
 3. A projection throws: after the caller's rollback none of them exist.
-4. Concurrency conflict inside a unit of work: `ConcurrencyException` is thrown, the
+4. Version-check conflict inside a unit of work: `ConcurrencyException` is thrown, the
    caller's transaction is still usable for rollback, nothing is written; a retry with
    a reloaded aggregate succeeds.
 5. Two `SaveAsync` calls on the same aggregate in one unit of work: the second load sees
@@ -232,5 +276,9 @@ of work internally around `SaveAsync`. This is a separate, opt-in step
 11. An inline snapshot written inside a unit of work does not survive the caller's
     rollback.
 12. A concurrent writer under a stricter isolation level (PostgreSQL `REPEATABLE READ`,
-    SQL Server `SNAPSHOT`) surfaces as `ConcurrencyException`.
-13. `Join` rejects a connection to a different database and a second, nested join.
+    SQL Server `SNAPSHOT`) surfaces as `ConcurrencyException`, and the caller's tolerant
+    rollback succeeds although the database has aborted the transaction.
+13. `Join` rejects a connection to a different database and a second, concurrent join.
+14. Consecutive units of work in one scope: join, complete, join again — both commit.
+15. A scope that ends with an active unit of work discards it; its deferred actions do not run.
+16. `CompletedAsync` does not throw when a deferred action fails; the remaining actions run.

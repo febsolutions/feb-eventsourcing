@@ -171,6 +171,12 @@ service (`SnapshotWriteWorker`) drains the queue. Semantics:
 Use it when snapshot latency is measurable in your p95 (large DTOs, high write
 rates); otherwise the synchronous default is simpler.
 
+Inside a caller-owned transaction
+([SQL → unit of work](sql.md#joining-the-callers-transaction-unit-of-work)) inline
+snapshot writes are part of that transaction, and background writes are enqueued only
+after the caller has committed — a snapshot of a state that was rolled back can never be
+stored.
+
 ## Verifying your snapshot contracts
 
 The generator guarantees no member is *forgotten*; it cannot guarantee that a
@@ -184,7 +190,7 @@ public void All_aggregates_roundtrip_completely()
     => SnapshotContract.AssertRoundtripsAll(typeof(Order).Assembly);
 ```
 
-See [Testing](testing.md#snapshot-contract-assertions-testkit).
+See [Testing](testing.md#3-snapshot-contract-assertions-testkit).
 
 ## Interplay with Redis
 

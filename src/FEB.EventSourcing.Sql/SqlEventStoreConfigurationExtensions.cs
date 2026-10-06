@@ -29,12 +29,18 @@ public static class SqlEventStoreConfigurationExtensions
             services.AddSingleton(options);
             services.AddSingleton(dialect);
 
+            // Unit of work (decision 0016): always registered, inactive until joined.
+            services.AddScoped<SqlUnitOfWork>();
+            services.AddScoped<ISqlUnitOfWork>(sp => sp.GetRequiredService<SqlUnitOfWork>());
+            services.AddScoped<IUnitOfWorkContext>(sp => sp.GetRequiredService<SqlUnitOfWork>());
+
             services.AddTransient<IEventStorePersistence, SqlEventStorePersistence>();
             services.AddSingleton<ISnapshotSerializer, SqlSnapshotSerializer>();
             services.AddTransient<ISnapshotPersistence>(sp => new SqlSnapshotPersistence(
                 dialect, options,
                 sp.GetRequiredService<ISnapshotSerializer>(),
-                sp.GetService<IEventStoreMetrics>()));
+                sp.GetService<IEventStoreMetrics>(),
+                sp.GetRequiredService<ISqlUnitOfWork>()));
 
             if (options.SnapshotsEnabled)
                 builder.EventStoreChainBuilder.AddDecorator(new SnapshotStoreRegistration());

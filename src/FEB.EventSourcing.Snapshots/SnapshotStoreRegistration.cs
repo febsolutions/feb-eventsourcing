@@ -18,7 +18,9 @@ public sealed class SnapshotStoreRegistration : IEventStoreRegistration
         var factory = sp.GetRequiredService<AggregateFactory<TAggregate, TId>>();
         var queue = sp.GetService<ISnapshotWriteQueue>();
 
-        return new SnapshotStore<TAggregate, TId>(persistence, innerStore, factory, registry, options, queue);
+        var unitOfWork = sp.GetService<IUnitOfWorkContext>() ?? NoUnitOfWorkContext.Instance;
+
+        return new SnapshotStore<TAggregate, TId>(persistence, innerStore, factory, registry, options, queue, unitOfWork);
     }
 
     public Type GetRegisteredType<TAggregate, TId>()

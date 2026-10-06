@@ -16,9 +16,16 @@ namespace FEB.EventSourcing.Sql;
 public class SqlEventStorePersistence(
     ISqlDialect dialect,
     SqlEventStoreOptions options,
-    IEventStoreMetrics? mayBeMetrics)
+    IEventStoreMetrics? mayBeMetrics,
+    ISqlUnitOfWork unitOfWork)
     : IEventStorePersistence, IAtomicOutboxAppend
 {
+    /// <summary>Without a unit of work: every operation uses a connection of its own.</summary>
+    public SqlEventStorePersistence(ISqlDialect dialect, SqlEventStoreOptions options, IEventStoreMetrics? mayBeMetrics)
+        : this(dialect, options, mayBeMetrics, SqlUnitOfWork.Inactive)
+    {
+    }
+
     private const string Source = "sql-events";
 
     private readonly IEventStoreMetrics _metrics = mayBeMetrics ?? new NoOpEventStoreMetrics();
@@ -57,29 +64,38 @@ public class SqlEventStorePersistence(
         var aggregateId = IdToString(id);
         var newVersion = expectedVersion + events.Count;
 
-        await using var connection = dialect.CreateConnection(options.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var tx = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        // Own connection + transaction, or the caller's when a unit of work is active
+        // (then nothing is committed, rolled back or disposed here).
+        await using var lease = await SqlLease.OpenAsync(dialect, options, unitOfWork, transactional: true, cancellationToken);
 
         // 1) Version compare-and-set
         int affected;
-        if (expectedVersion < 0)
+        try
         {
-            affected = await ExecuteAsync(connection, tx, dialect.InsertVersionIfAbsent(options), cancellationToken,
-                ("aggregate_type", aggregateType), ("aggregate_id", aggregateId), ("version", newVersion));
+            if (expectedVersion < 0)
+            {
+                affected = await lease.ExecuteAsync(dialect.InsertVersionIfAbsent(options), cancellationToken,
+                    ("aggregate_type", aggregateType), ("aggregate_id", aggregateId), ("version", newVersion));
+            }
+            else
+            {
+                affected = await lease.ExecuteAsync(
+                    $"UPDATE {options.Qualified(options.VersionsTable)} SET version = @new_version " +
+                    "WHERE aggregate_type = @aggregate_type AND aggregate_id = @aggregate_id AND version = @expected",
+                    cancellationToken,
+                    ("new_version", newVersion), ("aggregate_type", aggregateType), ("aggregate_id", aggregateId), ("expected", expectedVersion));
+            }
         }
-        else
+        catch (DbException ex) when (dialect.IsConcurrencyConflict(ex))
         {
-            affected = await ExecuteAsync(connection, tx,
-                $"UPDATE {options.Qualified(options.VersionsTable)} SET version = @new_version " +
-                "WHERE aggregate_type = @aggregate_type AND aggregate_id = @aggregate_id AND version = @expected",
-                cancellationToken,
-                ("new_version", newVersion), ("aggregate_type", aggregateType), ("aggregate_id", aggregateId), ("expected", expectedVersion));
+            // Stricter isolation levels report a concurrent writer as an error, not as 0 rows.
+            await lease.RollbackAsync(cancellationToken);
+            throw new ConcurrencyException<TId>(id, expectedVersion, innerException: ex);
         }
 
         if (affected == 0)
         {
-            await tx.RollbackAsync(cancellationToken);
+            await lease.RollbackAsync(cancellationToken);
             throw new ConcurrencyException<TId>(id, expectedVersion);
         }
 
@@ -94,7 +110,7 @@ public class SqlEventStorePersistence(
             foreach (var e in events)
             {
                 var m = e.Metadata;
-                await ExecuteAsync(connection, tx, insert, cancellationToken,
+                await lease.ExecuteAsync(insert, cancellationToken,
                     ("event_id", m.EventId),
                     ("aggregate_type", aggregateType),
                     ("aggregate_id", aggregateId),
@@ -113,13 +129,13 @@ public class SqlEventStorePersistence(
             // 3) Outbox envelopes in the same transaction
             if (outboxEnvelopes != null)
                 foreach (var envelope in outboxEnvelopes)
-                    await SqlOutboxPersistence.InsertAsync(dialect, options, connection, tx, envelope, cancellationToken);
+                    await SqlOutboxPersistence.InsertAsync(dialect, options, lease.Connection, lease.Transaction, envelope, cancellationToken);
 
-            await tx.CommitAsync(cancellationToken);
+            await lease.CommitAsync(cancellationToken);
         }
-        catch (DbException ex) when (dialect.IsDuplicateKey(ex))
+        catch (DbException ex) when (dialect.IsDuplicateKey(ex) || dialect.IsConcurrencyConflict(ex))
         {
-            await tx.RollbackAsync(cancellationToken);
+            await lease.RollbackAsync(cancellationToken);
             throw new ConcurrencyException<TId>(id, expectedVersion, innerException: ex);
         }
 
@@ -134,15 +150,15 @@ public class SqlEventStorePersistence(
         var sw = Stopwatch.StartNew();
         var result = new List<EventEnvelope<TAggregate, TId>>();
 
-        await using var connection = dialect.CreateConnection(options.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
+        // Inside a unit of work: the caller's connection — a second connection would neither
+        // see the unit's own uncommitted events nor get past its locks.
+        await using var lease = await SqlLease.OpenAsync(dialect, options, unitOfWork, transactional: false, cancellationToken);
 
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText =
+        await using var cmd = lease.CreateCommand(
             $"SELECT event_id, version, event_type, {dialect.JsonToText("payload")}, occurred_at, tenant_id, user_id, correlation_id, causation_id, {dialect.JsonToText("headers")} " +
             $"FROM {options.Qualified(options.EventsTable)} " +
             "WHERE aggregate_type = @aggregate_type AND aggregate_id = @aggregate_id AND version >= @from_version " +
-            "ORDER BY version";
+            "ORDER BY version");
         AddParameters(cmd, ("aggregate_type", typeof(TAggregate).Name), ("aggregate_id", IdToString(aggregateId)), ("from_version", fromVersion));
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -176,11 +192,9 @@ public class SqlEventStorePersistence(
 
     public async Task<bool> IsExistsAsync<TAggregate, TId>(TId id, CancellationToken cancellationToken = default)
     {
-        await using var connection = dialect.CreateConnection(options.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var lease = await SqlLease.OpenAsync(dialect, options, unitOfWork, transactional: false, cancellationToken);
 
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT 1 FROM {options.Qualified(options.VersionsTable)} WHERE aggregate_type = @aggregate_type AND aggregate_id = @aggregate_id";
+        await using var cmd = lease.CreateCommand($"SELECT 1 FROM {options.Qualified(options.VersionsTable)} WHERE aggregate_type = @aggregate_type AND aggregate_id = @aggregate_id");
         AddParameters(cmd, ("aggregate_type", typeof(TAggregate).Name), ("aggregate_id", IdToString(id)));
 
         return await cmd.ExecuteScalarAsync(cancellationToken) != null;
@@ -190,11 +204,9 @@ public class SqlEventStorePersistence(
     {
         var ids = new List<TId>();
 
-        await using var connection = dialect.CreateConnection(options.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var lease = await SqlLease.OpenAsync(dialect, options, unitOfWork, transactional: false, cancellationToken);
 
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT aggregate_id FROM {options.Qualified(options.VersionsTable)} WHERE aggregate_type = @aggregate_type";
+        await using var cmd = lease.CreateCommand($"SELECT aggregate_id FROM {options.Qualified(options.VersionsTable)} WHERE aggregate_type = @aggregate_type");
         AddParameters(cmd, ("aggregate_type", typeof(TAggregate).Name));
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);

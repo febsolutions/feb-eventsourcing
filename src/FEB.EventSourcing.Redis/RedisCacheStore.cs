@@ -19,10 +19,25 @@ public class RedisCacheStore<TAggregate, TId>(
     ISnapshotSerializer serializer,
     RedisEventStoreOptions options,
     IEventStoreMetrics metrics,
+    IUnitOfWorkContext unitOfWork,
     ILogger<RedisCacheStore<TAggregate, TId>>? logger = null)
     : ProxyStore<TAggregate, TId>(innerStore)
     where TAggregate : AggregateRoot<TAggregate, TId>, IEntity<TId>, new()
 {
+    public RedisCacheStore(
+        IEventStore<TAggregate, TId> innerStore,
+        AggregateFactory<TAggregate, TId> aggregateFactory,
+        ISnapshotMetadataRegistry? snapshotMetadataRegistry,
+        IRedisCacheDatabase redis,
+        ISnapshotSerializer serializer,
+        RedisEventStoreOptions options,
+        IEventStoreMetrics metrics,
+        ILogger<RedisCacheStore<TAggregate, TId>>? logger = null)
+        : this(innerStore, aggregateFactory, snapshotMetadataRegistry, redis, serializer, options, metrics,
+            NoUnitOfWorkContext.Instance, logger)
+    {
+    }
+
     private const string Source = "redis";
 
     private readonly ISnapshotMetadata? _meta = snapshotMetadataRegistry?.GetForAggregate(typeof(TAggregate));
@@ -32,7 +47,10 @@ public class RedisCacheStore<TAggregate, TId>(
 
     public override async Task<TAggregate?> LoadByIdAsync(TId id, CancellationToken cancellationToken = default)
     {
-        if (_meta == null)
+        // Inside a caller's transaction the cache is bypassed: the flow may already have
+        // written uncommitted events for this aggregate, and a state loaded through the
+        // transaction must never be cached (it may still be rolled back).
+        if (_meta == null || unitOfWork.IsActive)
             return await base.LoadByIdAsync(id, cancellationToken);
 
         var fromCache = await TryLoadFromCacheAsync(id);
@@ -42,7 +60,11 @@ public class RedisCacheStore<TAggregate, TId>(
         var aggregate = await base.LoadByIdAsync(id, cancellationToken);
 
         if (aggregate != null)
-            await TryCacheAsync(aggregate);
+        {
+            var state = TryCapture(aggregate);
+            if (state != null)
+                await TryWriteAsync(aggregate.Id, state);
+        }
 
         return aggregate;
     }
@@ -61,8 +83,16 @@ public class RedisCacheStore<TAggregate, TId>(
             throw;
         }
 
-        if (_meta != null)
-            await TryCacheAsync(aggregate);
+        if (_meta == null)
+            return;
+
+        // Capture the state now; write it only once the data is committed (immediately
+        // without a unit of work). Deferred, the aggregate may already hold further,
+        // uncommitted changes.
+        var id = aggregate.Id;
+        var state = TryCapture(aggregate);
+        if (state != null)
+            await unitOfWork.AfterCommitAsync(_ => TryWriteAsync(id, state), cancellationToken);
     }
 
     public override async Task<bool> IsExistsAsync(TId id, CancellationToken cancellationToken = default)
@@ -114,27 +144,38 @@ public class RedisCacheStore<TAggregate, TId>(
         }
     }
 
-    private async Task TryCacheAsync(TAggregate aggregate)
+    private CachedAggregateState? TryCapture(TAggregate aggregate)
     {
         try
         {
             var snapshot = _meta!.CreateSnapshot(aggregate);
             var payload = serializer.Serialize(snapshot, _meta.SnapshotType, options.Compression);
 
-            var state = new CachedAggregateState(
+            return new CachedAggregateState(
                 payload,
                 aggregate.Version,
                 _meta.Version,
                 options.Compression,
                 DateTime.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Capturing the cache state for {Key} failed", Key(aggregate.Id));
+            return null;
+        }
+    }
 
-            await redis.TrySetAsync(Key(aggregate.Id), state, JitteredTtl());
+    private async Task TryWriteAsync(TId id, CachedAggregateState state)
+    {
+        try
+        {
+            await redis.TrySetAsync(Key(id), state, JitteredTtl());
 
             metrics.IncrementWrite<TAggregate>(Source);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Redis cache write for {Key} failed", Key(aggregate.Id));
+            _logger.LogWarning(ex, "Redis cache write for {Key} failed", Key(id));
         }
     }
 

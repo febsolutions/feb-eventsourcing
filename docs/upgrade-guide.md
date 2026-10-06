@@ -1,5 +1,24 @@
 # Upgrade guide
 
+## 9.3.0
+
+No action is required to upgrade. Two changes are worth knowing:
+
+1. **Database-level conflicts are reported as `ConcurrencyException<TId>`** by the
+   PostgreSQL and SQL Server providers: serialization failures (`40001`), snapshot update
+   conflicts (`3960`) and deadlock victims (`40P01` / `1205`), with the provider exception
+   as `InnerException`. Previously the provider exception surfaced directly. If you caught
+   `PostgresException`/`SqlException` for these cases, catch `ConcurrencyException<TId>`
+   instead — it is the same retry situation as a version conflict. Custom `ISqlDialect`
+   implementations can recognise such errors by implementing `IsConcurrencyConflict`.
+2. **Outbox envelopes are written with the events** — in the same transaction on
+   PostgreSQL, SQL Server and MongoDB with `UseTransactions()`, and always before the
+   projections. A failing projection no longer keeps stored events from their subscribers
+   ([decision 0015](decisions/0015-outbox-written-atomically-with-the-events.md)).
+
+New and optional: relational stores can join a transaction owned by the application —
+see [SQL → unit of work](sql.md#joining-the-callers-transaction-unit-of-work).
+
 ## 9.2.1 (first open-source release)
 
 The framework is now developed in the open at
