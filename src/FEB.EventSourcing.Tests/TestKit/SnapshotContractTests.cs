@@ -42,7 +42,7 @@ public class SnapshotContractTests
             .Which.Message.Should().Contain("[AutoSnapshot]");
     }
 
-    // --- absichtlich kaputtes Beispiel: Restore verliert Property B ---
+    // --- deliberately broken example: restore loses property B ---
 
     public sealed class LossyThing
     {

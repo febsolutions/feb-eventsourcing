@@ -20,6 +20,12 @@ addition:
   recommendation and let the maintainer decide — do not guess.
 - Keep everything in English; never write customer data, internal hostnames or
   credentials into code, tests, sample data, documentation or commit messages.
+- Architectural decisions are recorded as documents in `docs/decisions/` (next number,
+  format in its README); a changed decision supersedes the old document instead of
+  editing it.
+- Problems found in production are documented **anonymously** — the technical failure
+  and its mechanism, never the affected application, organisation, customer data or
+  figures from a specific installation.
 
 ## Git
 
@@ -43,6 +49,7 @@ dotnet run --project samples/OrderSample         # runnable example
 | Topic | Location |
 |---|---|
 | User documentation | `docs/README.md` (index) |
+| Architecture decisions | `docs/decisions/` |
 | Framework tests | `src/FEB.EventSourcing.Tests` |
 | Package smoke test | `tests/PackageConsumer` |
 | Example | `samples/OrderSample` |

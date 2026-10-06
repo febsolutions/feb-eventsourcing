@@ -44,7 +44,7 @@ public sealed class AutoSnapshotGenerator : IIncrementalGenerator
                 spc.AddSource(hint, GenerateSource(m));
             }
 
-            // DI-Modul: explizite Registrierung aller Metadaten statt AppDomain-Scan.
+            // DI module: explicit registration of all metadata instead of an AppDomain scan.
             if (models.Length > 0)
                 spc.AddSource("SnapshotMetadataModule.g.cs", GenerateModuleSource(models, asmName));
         });

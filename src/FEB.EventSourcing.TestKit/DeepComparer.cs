@@ -3,7 +3,7 @@ using System.Collections;
 namespace FEB.EventSourcing.TestKit;
 
 /// <summary>
-/// Struktureller Vergleich zweier Objektgraphen; sammelt Pfade aller Abweichungen.
+/// Structural comparison of two object graphs; collects the paths of all differences.
 /// </summary>
 internal static class DeepComparer
 {

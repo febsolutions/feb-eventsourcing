@@ -268,7 +268,7 @@ public abstract class PersistenceContractTests
         var delivered = new List<Guid>();
         for (var round = 0; round < 10 && delivered.Count < enqueued.Count; round++)
         {
-            // kleine Batches erzwingen mehrere Dequeue-Runden
+            // small batches force several dequeue rounds
             var batch = await outbox.DequeueBatchAsync(names, 5);
             foreach (var pending in batch)
             {
