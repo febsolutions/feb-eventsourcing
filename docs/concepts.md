@@ -196,7 +196,11 @@ Both receive an `EventHandlingContext` with the event's metadata
 causation, headers) and `GetAggregateId<TId>()`.
 
 Rule of thumb: **if it can fail for reasons outside your process, it belongs in an
-async handler (or a dedicated outbox subscriber).** Details, guarantees and
+async handler (or a dedicated outbox subscriber).** This matters even more when the
+relational store joins the caller's transaction
+([SQL → unit of work](sql.md#joining-the-callers-transaction-unit-of-work)): sync handlers
+then run before the caller commits, so an effect outside the database could happen for a
+change that is rolled back afterwards. Details, guarantees and
 multi-consumer setups are in [Outbox and subscriptions](outbox.md).
 
 ## Event design and versioning

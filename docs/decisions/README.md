@@ -21,6 +21,7 @@ rejected, and what it costs. Read the relevant one before proposing a change to 
 | [0013](0013-optional-stable-event-names.md) | Stable event names are optional | Accepted |
 | [0014](0014-generator-ships-in-statecontracts.md) | The generator ships inside StateContracts | Accepted |
 | [0015](0015-outbox-written-atomically-with-the-events.md) | Outbox envelopes are written atomically with the events | Accepted |
+| [0016](0016-caller-provided-transaction.md) | Relational stores can join a transaction provided by the caller | Accepted |
 
 ## Writing a new decision
 

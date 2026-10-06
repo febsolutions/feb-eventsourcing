@@ -114,6 +114,10 @@ public sealed class PostgresDialect : ISqlDialect
     public bool IsDuplicateKey(DbException exception)
         => exception is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
+    // 40001: serialization failure (REPEATABLE READ / SERIALIZABLE), 40P01: deadlock victim.
+    public bool IsConcurrencyConflict(DbException exception)
+        => exception is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected };
+
     public string JsonParameter(string placeholder) => $"{placeholder}::jsonb";
 
     public string JsonToText(string column) => $"{column}::text";

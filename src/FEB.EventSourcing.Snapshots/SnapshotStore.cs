@@ -13,9 +13,22 @@ public class SnapshotStore<TAggregate, TId>(
     AggregateFactory<TAggregate, TId> aggregateFactory,
     ISnapshotMetadataRegistry? snapshotMetadataRegistry,
     EventStoreOptions options,
-    ISnapshotWriteQueue? snapshotWriteQueue = null) : ProxyStore<TAggregate, TId>(innerStore)
+    ISnapshotWriteQueue? snapshotWriteQueue,
+    IUnitOfWorkContext unitOfWork) : ProxyStore<TAggregate, TId>(innerStore)
     where TAggregate : AggregateRoot<TAggregate, TId>, IEntity<TId>, new()
 {
+    public SnapshotStore(
+        ISnapshotPersistence snapshotPersistence,
+        IEventStore<TAggregate, TId> innerStore,
+        AggregateFactory<TAggregate, TId> aggregateFactory,
+        ISnapshotMetadataRegistry? snapshotMetadataRegistry,
+        EventStoreOptions options,
+        ISnapshotWriteQueue? snapshotWriteQueue = null)
+        : this(snapshotPersistence, innerStore, aggregateFactory, snapshotMetadataRegistry, options, snapshotWriteQueue,
+            NoUnitOfWorkContext.Instance)
+    {
+    }
+
     private readonly int _everyNEvents = options.SnapshotsEveryNEvents;
     private readonly ISnapshotMetadata? _meta = snapshotMetadataRegistry?.GetForAggregate(typeof(TAggregate));
 
@@ -81,12 +94,20 @@ public class SnapshotStore<TAggregate, TId>(
 
         if (snapshotWriteQueue != null)
         {
-            snapshotWriteQueue.TryEnqueue(new SnapshotWriteJob(
-                typeof(TAggregate).Name,
-                ct => snapshotPersistence.SaveAsync<TAggregate, TId>(snapshot, snapshotType, id, version, schemaVersion, ct)));
+            // Background jobs run outside the request flow: enqueue only after the caller's
+            // transaction has committed, and never with a persistence bound to it.
+            var background = snapshotPersistence.ForBackgroundWork();
+            await unitOfWork.AfterCommitAsync(_ =>
+            {
+                snapshotWriteQueue.TryEnqueue(new SnapshotWriteJob(
+                    typeof(TAggregate).Name,
+                    ct => background.SaveAsync<TAggregate, TId>(snapshot, snapshotType, id, version, schemaVersion, ct)));
+                return Task.CompletedTask;
+            }, cancellationToken);
             return;
         }
 
+        // Inline: part of the caller's transaction when the persistence takes part in one.
         await snapshotPersistence.SaveAsync<TAggregate, TId>(snapshot, snapshotType, id, version, schemaVersion, cancellationToken);
     }
 }

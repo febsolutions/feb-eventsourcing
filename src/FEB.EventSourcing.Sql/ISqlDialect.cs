@@ -48,6 +48,15 @@ public interface ISqlDialect
     bool IsDuplicateKey(DbException exception);
 
     /// <summary>
+    /// True if the exception reports a conflict with a concurrent writer that is not a
+    /// duplicate key — serialization failure, snapshot update conflict, deadlock victim.
+    /// Such errors are surfaced as <c>ConcurrencyException</c> so the caller's retry logic
+    /// applies; they occur mainly under stricter isolation levels set by a caller-owned
+    /// transaction. The default recognises none.
+    /// </summary>
+    bool IsConcurrencyConflict(DbException exception) => false;
+
+    /// <summary>
     /// Wraps a text parameter placeholder for a JSON column, e.g. Postgres needs
     /// <c>@p::jsonb</c> while SQL Server stores JSON as nvarchar and returns the
     /// placeholder unchanged.

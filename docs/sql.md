@@ -119,6 +119,120 @@ semantics. Provider specifics:
   configured retention (default 7 days; `SetCompletedRetention`,
   `DisableCompletedCleanup`, `SetCleanupBatchSize`).
 
+## Joining the caller's transaction (unit of work)
+
+When event sourcing is introduced into an **existing application**, its tables usually
+stay in place and are written through an ORM such as EF Core. The relational store can
+then take part in the application's own transaction: the table write, the events, the
+outbox envelopes, inline snapshots and the projections commit or roll back **together**.
+The feature is optional — without it nothing changes. Background and rationale:
+[decision 0016](decisions/0016-caller-provided-transaction.md).
+
+`UsePostgres`/`UseSqlServer` register `ISqlUnitOfWork` as a scoped service. It is inactive
+until the caller joins it with its connection and transaction:
+
+```csharp
+var db = services.GetRequiredService<LegacyDbContext>();
+var unitOfWork = services.GetRequiredService<ISqlUnitOfWork>();
+
+// Required with EnableRetryOnFailure: EF Core only allows user-initiated transactions
+// inside its execution strategy, which retries the whole block on transient errors.
+var strategy = db.Database.CreateExecutionStrategy();
+await strategy.ExecuteAsync(async () =>
+{
+    db.ChangeTracker.Clear();                            // every attempt starts clean
+
+    await using var transaction = await db.Database.BeginTransactionAsync();
+    unitOfWork.Join(db.Database.GetDbConnection(), transaction.GetDbTransaction());
+    try
+    {
+        db.Orders.Add(new LegacyOrder { Id = id, Customer = "ACME" });
+        await db.SaveChangesAsync();                     // existing table write
+
+        var order = Order.CreateNew(id);
+        order.Create("ACME");
+        await store.SaveAsync(order, context);           // events, envelopes, projections
+
+        await transaction.CommitAsync();
+    }
+    catch
+    {
+        unitOfWork.Discarded();
+        try { await transaction.RollbackAsync(); }
+        catch { /* the database may already have aborted the transaction */ }
+        throw;
+    }
+
+    await unitOfWork.CompletedAsync();                   // after the commit; never throws
+});
+```
+
+**What to know:**
+
+- **Explicit transactions.** Every write path that should include events has to use an
+  explicit transaction as above. Applications that rely on the implicit transaction of
+  each `SaveChanges` call need this change per write path — that is the main effort.
+- **Inside the transaction:** version check, events, outbox envelopes, inline snapshots,
+  projections and sync event handlers. Sync handlers therefore run **before** the commit
+  and must not have effects outside the database — those belong in the outbox.
+- **After the commit:** the Redis write-through and the enqueueing of background snapshot
+  writes (`CompletedAsync` runs them; on `Discarded()` they are dropped). While a unit of
+  work is active the Redis cache is bypassed for loads, because the flow may already have
+  written uncommitted events.
+- **Complete after the `try`.** `CompletedAsync` never throws — a failing post-commit
+  action is logged — but it belongs after the commit, outside the code that would roll
+  back.
+- **Concurrency conflicts** surface as `ConcurrencyException<TId>` without the store
+  rolling anything back; the transaction belongs to the caller. A version-check conflict
+  leaves the transaction usable; after a database-level conflict (serialization failure,
+  snapshot update conflict, deadlock) the database may already have aborted it — the
+  caller may only roll back, and the rollback has to tolerate that (see the example).
+  After a rollback the aggregate instance is stale: reload it before retrying.
+- **Isolation level:** the caller's; the store never changes it. Under stricter levels a
+  concurrent writer surfaces as a database error, which is reported as
+  `ConcurrencyException<TId>` as well.
+- **Projections** can write through the caller's transaction via
+  `ISqlUnitOfWork.Connection`/`Transaction` (plain SQL, Dapper) — the better choice for
+  shadow tables. A projection that writes through the caller's `DbContext` must call
+  `SaveChangesAsync` itself and shares the caller's change tracker.
+- **Lifecycle:** one unit of work at a time per scope; consecutive ones are fine (one per
+  aggregate in a loop). `Join` rejects a connection to another database than the store's
+  and a second, concurrent join. A scope that ends with an active unit of work discards it
+  and logs a warning.
+- **Outbox ordering:** envelopes become visible to the outbox worker at commit; with long
+  transactions the delivery order across aggregates can deviate more from creation order
+  (within one aggregate it stays correct).
+
+A projection writing through the unit of work:
+
+```csharp
+public sealed class OrderTableProjection(ISqlUnitOfWork unitOfWork, SqlEventStoreOptions options)
+    : IAggregateProjectionWriter<Order>
+{
+    public async Task UpdateAsync(Order aggregate, ProjectionContext context, CancellationToken ct)
+    {
+        if (!unitOfWork.IsActive)
+            return;   // or write through a connection of your own
+
+        await using var command = unitOfWork.Connection.CreateCommand();
+        command.Transaction = unitOfWork.Transaction;
+        command.CommandText = $"INSERT INTO {options.Qualified("order_table")} (aggregate_id, version, customer) VALUES (@id, @version, @customer)";
+        AddParameter(command, "@id", aggregate.Id);
+        AddParameter(command, "@version", aggregate.Version);
+        AddParameter(command, "@customer", aggregate.Customer);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    private static void AddParameter(DbCommand command, string name, object value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value;
+        command.Parameters.Add(parameter);
+    }
+}
+```
+
 ## Operations
 
 - **Backups**: standard database backups; snapshots are derived and disposable.

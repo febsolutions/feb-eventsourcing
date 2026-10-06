@@ -131,6 +131,10 @@ public sealed class SqlServerDialect : ISqlDialect
     public bool IsDuplicateKey(DbException exception)
         => exception is SqlException { Number: 2601 or 2627 };
 
+    // 3960: snapshot isolation update conflict, 1205: deadlock victim.
+    public bool IsConcurrencyConflict(DbException exception)
+        => exception is SqlException { Number: 3960 or 1205 };
+
     public string JsonParameter(string placeholder) => placeholder;
 
     public string JsonToText(string column) => column;

@@ -8,9 +8,23 @@ public class SqlSnapshotPersistence(
     ISqlDialect dialect,
     SqlEventStoreOptions options,
     ISnapshotSerializer serializer,
-    IEventStoreMetrics? mayBeMetrics)
+    IEventStoreMetrics? mayBeMetrics,
+    ISqlUnitOfWork unitOfWork)
     : ISnapshotPersistence
 {
+    /// <summary>Without a unit of work: every operation uses a connection of its own.</summary>
+    public SqlSnapshotPersistence(ISqlDialect dialect, SqlEventStoreOptions options, ISnapshotSerializer serializer, IEventStoreMetrics? mayBeMetrics)
+        : this(dialect, options, serializer, mayBeMetrics, SqlUnitOfWork.Inactive)
+    {
+    }
+
+    /// <summary>
+    /// Background writes run after the request flow and must never touch a caller's
+    /// connection: they get an instance detached from the unit of work.
+    /// </summary>
+    public ISnapshotPersistence ForBackgroundWork()
+        => new SqlSnapshotPersistence(dialect, options, serializer, mayBeMetrics, SqlUnitOfWork.Inactive);
+
     private const string Source = "sql-snapshots";
     private readonly IEventStoreMetrics _metrics = mayBeMetrics ?? new NoOpEventStoreMetrics();
 
@@ -19,10 +33,11 @@ public class SqlSnapshotPersistence(
         var sw = Stopwatch.StartNew();
         var payload = serializer.Serialize(snapshot, snapshotType, options.Compression);
 
-        await using var connection = dialect.CreateConnection(options.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
+        // Inside a unit of work the snapshot is written in the caller's transaction: written
+        // separately it would survive a rollback — a snapshot of a state that never existed.
+        await using var lease = await SqlLease.OpenAsync(dialect, options, unitOfWork, transactional: false, cancellationToken);
 
-        await SqlEventStorePersistence.ExecuteAsync(connection, null, dialect.UpsertSnapshot(options), cancellationToken,
+        await lease.ExecuteAsync(dialect.UpsertSnapshot(options), cancellationToken,
             ("aggregate_type", typeof(TAggregate).Name),
             ("aggregate_id", SqlEventStorePersistence.IdToString(id)),
             ("stream_version", streamVersion),
@@ -40,13 +55,11 @@ public class SqlSnapshotPersistence(
     {
         var sw = Stopwatch.StartNew();
 
-        await using var connection = dialect.CreateConnection(options.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
+        await using var lease = await SqlLease.OpenAsync(dialect, options, unitOfWork, transactional: false, cancellationToken);
 
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText =
+        await using var cmd = lease.CreateCommand(
             $"SELECT stream_version, schema_version, payload, compression FROM {options.Qualified(options.SnapshotsTable)} " +
-            "WHERE aggregate_type = @aggregate_type AND aggregate_id = @aggregate_id";
+            "WHERE aggregate_type = @aggregate_type AND aggregate_id = @aggregate_id");
         SqlEventStorePersistence.AddParameters(cmd,
             ("aggregate_type", typeof(TAggregate).Name),
             ("aggregate_id", SqlEventStorePersistence.IdToString(id)));

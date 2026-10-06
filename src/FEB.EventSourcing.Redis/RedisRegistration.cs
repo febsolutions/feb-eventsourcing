@@ -20,7 +20,9 @@ public class RedisRegistration(RedisEventStoreOptions options) : IEventStoreRegi
         var aggregateFactory = sp.GetRequiredService<AggregateFactory<TAggregate, TId>>();
         var logger = sp.GetService<ILoggerFactory>()?.CreateLogger<RedisCacheStore<TAggregate, TId>>();
 
-        return new RedisCacheStore<TAggregate, TId>(innerStore, aggregateFactory, snapshotMetadataRegistry, redis, serializer, options, metrics, logger);
+        var unitOfWork = sp.GetService<IUnitOfWorkContext>() ?? NoUnitOfWorkContext.Instance;
+
+        return new RedisCacheStore<TAggregate, TId>(innerStore, aggregateFactory, snapshotMetadataRegistry, redis, serializer, options, metrics, unitOfWork, logger);
     }
 
     public Type GetRegisteredType<TAggregate, TId>()

@@ -24,4 +24,11 @@ public interface ISnapshotPersistence
         Type snapshotType,
         int expectedSchemaVersion,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// An instance for work that runs outside the current request flow (background
+    /// snapshot writes). Persistences bound to a caller's transaction return one that
+    /// is detached from it; the default is this instance.
+    /// </summary>
+    ISnapshotPersistence ForBackgroundWork() => this;
 }

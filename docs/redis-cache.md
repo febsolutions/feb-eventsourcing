@@ -101,6 +101,16 @@ caught, logged at warning level, and the call falls back to the inner store. A
 Redis outage slows the application down to "no cache" — it never breaks it. When
 Redis comes back, entries repopulate on the next loads.
 
+### Inside a caller-owned transaction
+
+With a relational store, the application can let the event store join its own
+transaction ([SQL → unit of work](sql.md#joining-the-callers-transaction-unit-of-work)).
+While such a unit of work is active the cache is **bypassed for loads** — the flow may
+already have written uncommitted events for the aggregate, and a state loaded through the
+transaction could still be rolled back. The write-through after a save is captured at
+save time but written only **after the caller has committed**; on rollback nothing is
+cached.
+
 ## Multiple application instances
 
 All instances must share the **same** Redis (and prefix) — that is what makes
