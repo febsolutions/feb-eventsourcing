@@ -45,7 +45,7 @@ is *inclusive* of `fromVersion`.
 | Method | What it does | Typical use |
 |---|---|---|
 | `LoadByIdAsync(id)` | Rehydrates the aggregate (snapshot + delta or full replay; cache first if configured). Returns `null` if it does not exist. | every command that changes an existing aggregate |
-| `SaveAsync(aggregate, context)` | Appends the uncommitted events with an expected-version check, then projections, outbox, sync handlers. No-op if nothing is uncommitted. | end of every command |
+| `SaveAsync(aggregate, context)` | Appends the uncommitted events with an expected-version check together with their outbox envelopes (in one transaction where the store supports it), then projections and sync handlers. No-op if nothing is uncommitted. | end of every command |
 | `LoadEventsAsync(id, fromVersion)` | The raw event envelopes (payload + metadata) from `fromVersion` (inclusive) on. | audit views, debugging, custom projections, exports |
 | `IsExistsAsync(id)` | Cheap existence check (version document / cache), no replay. | validation before creating, guards |
 | `GetAllIdsAsync()` | All aggregate ids of this type. Loads them all into memory — fine for thousands, not for millions. | admin tasks, migrations, rebuilds |
@@ -280,7 +280,7 @@ Where things can go wrong in a command, and what the framework does:
 | Aggregate method throws (invariant violated) | nothing persisted | return a domain error |
 | Append conflicts (`ConcurrencyException<TId>`) | nothing persisted | reload + retry, or surface the conflict |
 | Persistence unavailable | nothing persisted (exception) | fail the request; retry policy at the edge |
-| Projection writer throws | **events are already durable**; the command fails; outbox/sync handlers not run for this save | make projections robust (catch transient errors internally, log, continue) or accept a rebuild; treat as a bug |
+| Projection writer throws | **events are already durable** and their outbox envelopes written (subscribers still get them); the command fails; sync handlers not run for this save | make projections robust (catch transient errors internally, log, continue) or accept a rebuild; treat as a bug |
 | Sync handler throws | events + projections done; the command fails | keep sync handlers trivial or move the work to an async handler |
 | Snapshot write fails | logged, ignored (or dropped from the background queue) | nothing — the next cadence hit retries |
 | Redis unavailable | logged, falls back to the store | nothing — watch the logs / metrics |

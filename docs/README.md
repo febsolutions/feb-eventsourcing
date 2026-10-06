@@ -3,7 +3,8 @@
 A modular event sourcing framework for .NET: MongoDB, PostgreSQL or SQL Server
 persistence, source-generated
 snapshots, an optional Redis aggregate cache, projections, sync/async event
-handlers and a transactional outbox with independently tracked subscribers.
+handlers and an outbox with independently tracked subscribers (written in the same
+transaction as the events on PostgreSQL, SQL Server and MongoDB replica sets).
 
 ## User guide
 

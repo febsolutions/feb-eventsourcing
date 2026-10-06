@@ -10,6 +10,18 @@ public interface IOutboxPersistence
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Enqueues the envelopes of one save. Providers write them in a single operation
+    /// where they can; the default enqueues them one by one.
+    /// </summary>
+    async Task EnqueueManyAsync(
+        IReadOnlyCollection<OutboxEnvelope> envelopes,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var envelope in envelopes)
+            await EnqueueAsync(envelope, cancellationToken);
+    }
+
+    /// <summary>
     /// Leases up to <paramref name="maxCount"/> envelopes that have at least one open
     /// delivery for any of <paramref name="subscriberNames"/>, and returns per envelope
     /// which of those subscribers are still pending.

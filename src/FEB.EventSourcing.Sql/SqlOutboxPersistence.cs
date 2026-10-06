@@ -26,12 +26,39 @@ public class SqlOutboxPersistence(
         public bool IsTerminal => DispatchedAt != null || DeadLetteredAt != null;
     }
 
+    /// <summary>The event store options this outbox shares — identifies "same store" for atomic appends.</summary>
+    internal SqlEventStoreOptions EventStoreOptions => options;
+
     public async Task EnqueueAsync(OutboxEnvelope envelope, CancellationToken cancellationToken = default)
     {
         await using var connection = dialect.CreateConnection(options.ConnectionString);
         await connection.OpenAsync(cancellationToken);
 
-        await SqlEventStorePersistence.ExecuteAsync(connection, null,
+        await InsertAsync(dialect, options, connection, null, envelope, cancellationToken);
+    }
+
+    public async Task EnqueueManyAsync(IReadOnlyCollection<OutboxEnvelope> envelopes, CancellationToken cancellationToken = default)
+    {
+        if (envelopes.Count == 0)
+            return;
+
+        await using var connection = dialect.CreateConnection(options.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+
+        foreach (var envelope in envelopes)
+            await InsertAsync(dialect, options, connection, tx, envelope, cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Inserts one envelope on the given connection/transaction. Shared with
+    /// <see cref="SqlEventStorePersistence"/>, which writes envelopes inside the append transaction.
+    /// </summary>
+    internal static Task InsertAsync(ISqlDialect dialect, SqlEventStoreOptions options, DbConnection connection,
+        DbTransaction? transaction, OutboxEnvelope envelope, CancellationToken cancellationToken)
+        => SqlEventStorePersistence.ExecuteAsync(connection, transaction,
             $"INSERT INTO {options.Qualified(options.OutboxTable)} (id, payload_json, metadata_json, created_at, deliveries_json) " +
             $"VALUES (@id, @payload_json, @metadata_json, @created_at, {dialect.JsonParameter("@deliveries_json")})",
             cancellationToken,
@@ -40,7 +67,6 @@ public class SqlOutboxPersistence(
             ("metadata_json", JsonSerializer.Serialize(envelope.Metadata, Json)),
             ("created_at", DateTime.UtcNow),
             ("deliveries_json", "{}"));
-    }
 
     public async Task<IReadOnlyList<PendingOutboxEnvelope>> DequeueBatchAsync(IReadOnlyCollection<string> subscriberNames, int maxCount, CancellationToken cancellationToken = default)
     {

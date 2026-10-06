@@ -184,7 +184,7 @@ pattern including the multi-subscriber partial-failure case.
 
 ## 6. Test coverage
 
-The framework suite (`src/FEB.EventSourcing.Tests`, 179 tests) is measured with
+The framework suite (`src/FEB.EventSourcing.Tests`, 191 tests) is measured with
 Coverlet and gated at **85 % line coverage**: locally via `scripts/coverage.sh`,
 in CI in the test step of the GitHub Actions workflow (same Coverlet threshold).
 
@@ -201,18 +201,18 @@ Current coverage (2026-10-06, `./scripts/coverage.sh`):
 | Package | Line | Branch | Method |
 |---|---|---|---|
 | FEB.EventSourcing.StateContracts | 100 % | 100 % | 100 % |
-| FEB.EventSourcing.SqlServer | 99.1 % | – | 90.9 % |
-| FEB.EventSourcing.Postgres | 99.0 % | – | 90.9 % |
+| FEB.EventSourcing.Postgres | 100 % | 50.0 % | 100 % |
+| FEB.EventSourcing.SqlServer | 100 % | 66.7 % | 100 % |
 | FEB.EventSourcing.InMemory | 94.7 % | 85.0 % | 100 % |
-| FEB.EventSourcing.MongoDb | 91.2 % | 80.2 % | 93.0 % |
-| FEB.EventSourcing.Abstractions | 91.0 % | 89.3 % | 85.8 % |
+| FEB.EventSourcing.Abstractions | 91.1 % | 89.7 % | 86.0 % |
+| FEB.EventSourcing.MongoDb | 90.6 % | 80.9 % | 93.2 % |
 | FEB.EventSourcing.Snapshots | 87.9 % | 75.0 % | 94.7 % |
 | FEB.EventSourcing.Snapshots.Generator | 87.7 % | 75.0 % | 100 % |
-| FEB.EventSourcing | 86.1 % | 79.0 % | 92.0 % |
-| FEB.EventSourcing.Sql | 85.7 % | 72.3 % | 85.1 % |
+| FEB.EventSourcing.Sql | 86.3 % | 74.5 % | 86.3 % |
+| FEB.EventSourcing | 85.9 % | 81.3 % | 91.1 % |
 | FEB.EventSourcing.Redis | 84.5 % | 65.5 % | 90.9 % |
 | FEB.EventSourcing.TestKit | 78.8 % | 75.8 % | 85.7 % |
-| **Total** | **88.4 %** | **76.1 %** | **90.6 %** |
+| **Total** | **88.3 %** | **77.5 %** | **91.0 %** |
 
 `FEB.EventSourcing.Metrics` and `FEB.Cqrs` are outside the gate's include filter
 (`[FEB.EventSourcing*]*`); `FEB.Cqrs` has its own dispatcher tests. What the suite
@@ -233,6 +233,7 @@ covers, by area:
 | MongoDB specifics: BSON metadata, background snapshots, unique index creation, idempotent init, version self-heal (both directions, missing doc), duplicate-insert reconciliation (own retry completes, foreign orphan throws) | Testcontainers |
 | MongoDB transactions (`UseTransactions`): roundtrip, stale writer incl. `ActualVersion`, atomic abort against orphan, creation race | Testcontainers (single-node RS) |
 | Outbox: default delivery, completion, per-subscriber dead-letter, one-failing-of-many, legacy envelopes, dispatcher adapter | Testcontainers |
+| Outbox written with the events: a failing projection never suppresses delivery (contract, every provider); a failed outbox write rolls the events back (PostgreSQL, SQL Server, MongoDB transactions); batch enqueue, custom outboxes, foreign-outbox guard | unit + Testcontainers |
 | Stable event names (`[EventName]`): attribute reading, name/alias resolution, CLR fallback, duplicate rejection, actionable error | unit |
 | Event names per provider: stored discriminator / `event_type` value, legacy CLR names and aliases still readable, outbox payload + dispatcher resolution | Testcontainers (Mongo, Postgres, SQL Server) |
 | Chain order: layer sorting, custom layer | unit + Testcontainers |

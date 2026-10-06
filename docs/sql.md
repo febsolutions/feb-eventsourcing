@@ -63,7 +63,8 @@ the composite unique index gives the same guarantees. Aggregate ids are stored a
 
 The relational providers use a **real transaction** for every append: version
 compare-and-set (`UPDATE … WHERE version = @expected`, or an insert-if-absent for new
-aggregates) plus all event inserts commit or roll back together. There is no
+aggregates), all event inserts and — with `UseSqlOutbox()` — the outbox envelopes
+commit or roll back together. There is no
 partial-write window and no self-heal needed — the concerns described for MongoDB
 standalone do not apply here. `ConcurrencyException<TId>` is raised when the version
 update affects 0 rows or the unique event index rejects a duplicate.
@@ -106,6 +107,8 @@ as bytes.
 Same model as the MongoDB outbox — see [Outbox and subscriptions](outbox.md) for
 semantics. Provider specifics:
 
+- Envelopes are written **in the append transaction** (see Atomicity): a stored event
+  always has its envelope, and a failed outbox write rolls the events back.
 - Leasing uses `FOR UPDATE SKIP LOCKED` (Postgres) / `READPAST, UPDLOCK, ROWLOCK`
   (SQL Server): concurrent workers never process the same envelope, and a lease is a
   single statement.

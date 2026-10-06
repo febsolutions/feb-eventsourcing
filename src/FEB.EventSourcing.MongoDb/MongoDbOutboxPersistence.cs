@@ -14,22 +14,36 @@ public class MongoDbOutboxPersistence(
     MongoOutboxOptions options
 ) : IOutboxPersistence
 {
+    /// <summary>Name of the outbox collection; the event persistence writes to it inside its append transaction.</summary>
+    internal string CollectionName => options.OutboxCollectionName;
+
     public async Task EnqueueAsync(
         OutboxEnvelope envelope,
         CancellationToken cancellationToken = default)
     {
-        var dao = new OutboxDao
-        {
-            Id = envelope.Metadata.EventId,
-            PayloadJson = JsonSerializer.Serialize(envelope.Payload),
-            MetadataJson = JsonSerializer.Serialize(envelope.Metadata),
-            CreatedAt = DateTime.UtcNow,
-            Deliveries = new Dictionary<string, OutboxDeliveryDao>()
-        };
+        await GetOutboxCollection()
+            .InsertOneAsync(CreateDao(envelope), cancellationToken: cancellationToken);
+    }
+
+    public async Task EnqueueManyAsync(
+        IReadOnlyCollection<OutboxEnvelope> envelopes,
+        CancellationToken cancellationToken = default)
+    {
+        if (envelopes.Count == 0)
+            return;
 
         await GetOutboxCollection()
-            .InsertOneAsync(dao, cancellationToken: cancellationToken);
+            .InsertManyAsync(envelopes.Select(CreateDao), new InsertManyOptions { IsOrdered = true }, cancellationToken);
     }
+
+    internal static OutboxDao CreateDao(OutboxEnvelope envelope) => new()
+    {
+        Id = envelope.Metadata.EventId,
+        PayloadJson = JsonSerializer.Serialize(envelope.Payload),
+        MetadataJson = JsonSerializer.Serialize(envelope.Metadata),
+        CreatedAt = DateTime.UtcNow,
+        Deliveries = new Dictionary<string, OutboxDeliveryDao>()
+    };
 
     public async Task<IReadOnlyList<PendingOutboxEnvelope>> DequeueBatchAsync(
         IReadOnlyCollection<string> subscriberNames,

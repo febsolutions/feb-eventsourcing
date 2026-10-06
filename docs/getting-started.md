@@ -17,7 +17,8 @@ in .NET:
   other.
 - Read models (projections) are updated in the same call that saves the events.
 - Side effects that must not block or fail the command (mails, brokers, external
-  APIs) go through a transactional outbox with independently tracked subscribers.
+  APIs) go through an outbox with independently tracked subscribers, written in the
+  same transaction as the events on PostgreSQL, SQL Server and MongoDB replica sets.
 - Snapshots (generated at compile time) and an optional Redis state cache keep loads
   fast as streams grow.
 
