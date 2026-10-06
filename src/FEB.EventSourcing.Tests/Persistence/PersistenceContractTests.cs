@@ -226,6 +226,32 @@ public abstract class PersistenceContractTests
     // ---------------------------------------------------------------- outbox
 
     [Fact]
+    public async Task Failing_projection_does_not_suppress_outbox_delivery()
+    {
+        // The events are durable before projections run; a failing read model must not
+        // keep them from the outbox, or subscribers silently miss stored events.
+        await using var sp = BuildHost("outbox_projection_fails", withOutbox: true);
+        await InitializeStorageAsync(sp);
+        var store = sp.GetRequiredService<IEventStore<Order, string>>();
+        var worker = sp.GetServices<Microsoft.Extensions.Hosting.IHostedService>().OfType<OutboxWorker>().Single();
+
+        var id = NewId();
+        var customer = FailingOrderProjectionWriter.FailMarker + NewId();
+        var order = Order.CreateNew(id);
+        order.Create(customer);
+
+        var save = () => store.SaveAsync(order, TestHost.NewCommandContext());
+        await save.Should().ThrowAsync<InvalidOperationException>("the read model failed");
+        (await store.LoadEventsAsync(id)).Should().ContainSingle("the events are durable regardless of the projection");
+
+        for (var i = 0; i < 4; i++)
+            await worker.ProcessBatchAsync(CancellationToken.None);
+
+        ContractRecordingSubscriber.Delivered.Should().Contain(customer,
+            "every stored event must reach the outbox - a failing projection must not suppress delivery");
+    }
+
+    [Fact]
     public async Task Outbox_delivers_to_subscribers_and_tracks_partial_failure_per_subscriber()
     {
         await using var sp = BuildHost("outbox", withOutbox: true);

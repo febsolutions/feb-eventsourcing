@@ -17,7 +17,7 @@ public class SqlEventStorePersistence(
     ISqlDialect dialect,
     SqlEventStoreOptions options,
     IEventStoreMetrics? mayBeMetrics)
-    : IEventStorePersistence
+    : IEventStorePersistence, IAtomicOutboxAppend
 {
     private const string Source = "sql-events";
 
@@ -25,7 +25,28 @@ public class SqlEventStorePersistence(
 
     internal static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.General);
 
-    public async Task AppendEventsAsync<TAggregate, TId>(TId id, int expectedVersion, ICollection<EventEnvelope<TAggregate, TId>> events, CancellationToken cancellationToken = default)
+    public Task AppendEventsAsync<TAggregate, TId>(TId id, int expectedVersion, ICollection<EventEnvelope<TAggregate, TId>> events, CancellationToken cancellationToken = default)
+        where TAggregate : AggregateRoot<TAggregate, TId>, IEntity<TId>, new()
+        => AppendAsync(id, expectedVersion, events, null, cancellationToken);
+
+    /// <summary>Atomic with the events when the outbox is the SQL outbox on this very store.</summary>
+    public bool SupportsAtomicAppend(IOutboxPersistence outbox)
+        => outbox is SqlOutboxPersistence sqlOutbox && ReferenceEquals(sqlOutbox.EventStoreOptions, options);
+
+    public Task AppendEventsWithOutboxAsync<TAggregate, TId>(TId id, int expectedVersion, ICollection<EventEnvelope<TAggregate, TId>> events,
+        IReadOnlyCollection<OutboxEnvelope> outboxEnvelopes, IOutboxPersistence outbox, CancellationToken cancellationToken = default)
+        where TAggregate : AggregateRoot<TAggregate, TId>, IEntity<TId>, new()
+    {
+        if (!SupportsAtomicAppend(outbox))
+            throw new InvalidOperationException("Atomic outbox appends require the SQL outbox of the same store (UseSqlOutbox).");
+
+        return AppendAsync(id, expectedVersion, events, outboxEnvelopes, cancellationToken);
+    }
+
+    // One transaction: version compare-and-set, events and — if given — the outbox
+    // envelopes. Any failure rolls back all of it.
+    private async Task AppendAsync<TAggregate, TId>(TId id, int expectedVersion, ICollection<EventEnvelope<TAggregate, TId>> events,
+        IReadOnlyCollection<OutboxEnvelope>? outboxEnvelopes, CancellationToken cancellationToken)
         where TAggregate : AggregateRoot<TAggregate, TId>, IEntity<TId>, new()
     {
         if (events.Count == 0)
@@ -88,6 +109,11 @@ public class SqlEventStorePersistence(
                     ("causation_id", (object?)m.CausationId ?? DBNull.Value),
                     ("headers", m.Headers is null ? DBNull.Value : JsonSerializer.Serialize(m.Headers, JsonOptions)));
             }
+
+            // 3) Outbox envelopes in the same transaction
+            if (outboxEnvelopes != null)
+                foreach (var envelope in outboxEnvelopes)
+                    await SqlOutboxPersistence.InsertAsync(dialect, options, connection, tx, envelope, cancellationToken);
 
             await tx.CommitAsync(cancellationToken);
         }

@@ -91,6 +91,9 @@ supersedes the old one.
   and build host, and it **ships inside `FEB.EventSourcing.StateContracts`**.
   ([0004](docs/decisions/0004-fail-closed-snapshot-generator.md),
   [0014](docs/decisions/0014-generator-ships-in-statecontracts.md))
+- **Outbox envelopes are written atomically with the events** wherever the store
+  supports it (PostgreSQL, SQL Server, MongoDB with `UseTransactions()`), and always
+  before the projections. ([0015](docs/decisions/0015-outbox-written-atomically-with-the-events.md))
 - **The outbox is at-least-once and tracked per subscriber.** Subscriber names are
   persistence keys: stable, without `.`, `$` or whitespace.
   ([0009](docs/decisions/0009-outbox-named-subscribers.md))

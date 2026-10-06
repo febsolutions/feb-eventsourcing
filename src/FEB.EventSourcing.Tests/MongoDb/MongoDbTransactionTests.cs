@@ -115,6 +115,43 @@ public class MongoDbTransactionTests(MongoDbFixture fixture)
     }
 
     [Fact]
+    public async Task Transactional_failed_outbox_write_rolls_back_the_events()
+    {
+        // With UseTransactions the outbox envelopes are part of the append transaction.
+        var services = new ServiceCollection();
+        var connectionString = fixture.GetConnectionString("es_tx_outbox_atomic");
+        services.AddEventSourcing(es =>
+        {
+            es.UseMongoDb(connectionString, o => o.UseTransactions());
+            es.UseMongoOutbox();
+            es.Aggregate<Order, string>(a => a.Factory(Order.CreateNew));
+        }, typeof(TestHost).Assembly);
+        await using var sp = services.BuildServiceProvider();
+        await sp.GetServices<Microsoft.Extensions.Hosting.IHostedService>().OfType<MongoDbIndexInitializer>().Single().EnsureAllAsync();
+
+        // Make every outbox write fail: a validator that rejects all documents.
+        var db = new MongoClient(connectionString).GetDatabase(new MongoUrl(connectionString).DatabaseName);
+        await db.RunCommandAsync<MongoDB.Bson.BsonDocument>(new MongoDB.Bson.BsonDocument
+        {
+            { "collMod", "outbox" },
+            { "validator", new MongoDB.Bson.BsonDocument("$jsonSchema",
+                new MongoDB.Bson.BsonDocument("required", new MongoDB.Bson.BsonArray { "never-present" })) },
+            { "validationAction", "error" }
+        });
+
+        var store = sp.GetRequiredService<IEventStore<Order, string>>();
+        var id = Guid.NewGuid().ToString("N");
+        var order = Order.CreateNew(id);
+        order.Create("ACME");
+
+        var save = () => store.SaveAsync(order, TestHost.NewCommandContext());
+        await save.Should().ThrowAsync<Exception>("the outbox write failed");
+
+        (await store.LoadEventsAsync(id)).Should().BeEmpty("events and outbox envelopes are one transaction");
+        (await store.IsExistsAsync(id)).Should().BeFalse("the version advance is rolled back as well");
+    }
+
+    [Fact]
     public async Task Transactional_concurrent_creation_yields_exactly_one_winner()
     {
         var (sp, _) = BuildHost("es_tx_create_race");

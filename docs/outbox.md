@@ -2,9 +2,12 @@
 
 The outbox is the framework's bridge to **everything outside the current process
 whose availability is not guaranteed**: message brokers, third-party APIs, e-mail
-gateways, other bounded contexts. It guarantees that every persisted event is
-delivered *at least once* to every registered consumer — even if the consumer is
-down when the event is saved, and even if the process crashes in between.
+gateways, other bounded contexts. Every stored event is delivered *at least once* to
+every registered consumer — even if the consumer is down when the event is saved.
+On PostgreSQL, SQL Server and MongoDB with `UseTransactions()` this holds without
+exception, because the envelopes are written in the same transaction as the events;
+see [§1](#1-why-an-outbox-at-all) for the one narrower case, MongoDB without a replica
+set.
 
 This chapter explains the mental model first, then the moving parts, then the
 scenarios you will meet when building an application on top of it.
@@ -15,15 +18,33 @@ scenarios you will meet when building an application on top of it.
 inside the same request, you would face the classic dual-write problem: the events
 are saved but the external call fails (or vice versa), and there is no transaction
 that spans both. The outbox solves this by making "notify the outside world" part of
-the same durable write:
+the durable write:
 
-1. `SaveAsync` appends the events **and** enqueues one outbox envelope per event.
+1. `SaveAsync` appends the events **and** writes one outbox envelope per event.
 2. A background worker later leases envelopes and delivers them.
 3. Delivery state is tracked durably; failed deliveries are retried; hopeless ones
    are dead-lettered for inspection.
 
-Nothing outside the process is called on the command path. Your command stays fast
-and either fully succeeds or fully fails.
+Nothing outside the process is called on the command path.
+
+**How "together" the events and envelopes are written** depends on the store:
+
+| Store | Events and envelopes | If the process dies or a write fails in between |
+|---|---|---|
+| PostgreSQL, SQL Server | one transaction | impossible — all or nothing |
+| MongoDB with `UseTransactions()` (replica set) | one transaction | impossible — all or nothing |
+| MongoDB without a replica set | two writes, envelopes immediately after the events | the events are stored, their envelopes are not; those events are not delivered |
+
+On a standalone MongoDB server two collections cannot be written atomically; the gap
+between the two writes is kept as small as possible and is an accepted limitation
+([decision 0015](decisions/0015-outbox-written-atomically-with-the-events.md)). Run a
+(single-node) replica set and enable `UseTransactions()` if every event must reach the
+outbox.
+
+In every store the envelopes are written **before** the projections run. A failing
+read model therefore never keeps stored events from their subscribers: `SaveAsync`
+reports the projection error, and the events are delivered regardless — they are
+stored, so the outside world has to learn about them.
 
 ## 2. The three roles
 

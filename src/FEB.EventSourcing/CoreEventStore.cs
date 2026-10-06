@@ -72,22 +72,41 @@ public class CoreEventStore<TAggregate, TId>(
             ));
         }
         
-        await persistence.AppendEventsAsync(aggregate.Id, expectedVersion, envelopes, cancellationToken);
+        var outboxEnvelopes = outbox != null
+            ? envelopes.Select(e => e.ToOutboxEnvelope()).ToList()
+            : null;
+
+        if (outboxEnvelopes != null
+            && outbox is Outbox { Persistence: var outboxPersistence }
+            && persistence is IAtomicOutboxAppend atomic
+            && atomic.SupportsAtomicAppend(outboxPersistence))
+        {
+            // Events and envelopes in one atomic operation: a stored event always has its envelope.
+            await atomic.AppendEventsWithOutboxAsync(aggregate.Id, expectedVersion, envelopes, outboxEnvelopes, outboxPersistence, cancellationToken);
+        }
+        else
+        {
+            await persistence.AppendEventsAsync(aggregate.Id, expectedVersion, envelopes, cancellationToken);
+
+            // Enqueue right after the append and before the projections, so a failing read
+            // model can never keep stored events from the outbox. Without a common
+            // transaction (MongoDB without a replica set, or an outbox in another store) a
+            // crash between these two writes can still lose the envelopes.
+            if (outboxEnvelopes != null)
+            {
+                if (outbox is Outbox concreteOutbox)
+                    await concreteOutbox.EnqueueManyAsync(outboxEnvelopes, cancellationToken);
+                else
+                    foreach (var outboxEnvelope in outboxEnvelopes)
+                        await outbox!.EnqueueAsync<TAggregate, TId>(outboxEnvelope, cancellationToken);
+            }
+        }
 
         var updateContext = new ProjectionUpdateContext<TAggregate, TId>(aggregate, aggregate.GetUncommittedEvents(), context.ToProjectionContext());
         
         aggregate.Commit(nextVersion);
 
         await projectionUpdater.UpdateAsync(updateContext, cancellationToken);
-
-        if (outbox != null)
-        {
-            foreach (var envelope in envelopes)
-            {
-                var outboxEnvelope = envelope.ToOutboxEnvelope();
-                await outbox.EnqueueAsync<TAggregate, TId>(outboxEnvelope, cancellationToken);
-            }
-        }
         
         if (eventDispatcher!= null)
             await eventDispatcher.DispatchAsync(envelopes, cancellationToken);

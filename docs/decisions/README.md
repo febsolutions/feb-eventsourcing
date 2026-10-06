@@ -20,6 +20,7 @@ rejected, and what it costs. Read the relevant one before proposing a change to 
 | [0012](0012-relational-providers.md) | Relational providers share one core and one table set | Accepted |
 | [0013](0013-optional-stable-event-names.md) | Stable event names are optional | Accepted |
 | [0014](0014-generator-ships-in-statecontracts.md) | The generator ships inside StateContracts | Accepted |
+| [0015](0015-outbox-written-atomically-with-the-events.md) | Outbox envelopes are written atomically with the events | Accepted |
 
 ## Writing a new decision
 

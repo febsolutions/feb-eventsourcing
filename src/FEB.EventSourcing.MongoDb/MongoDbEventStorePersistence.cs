@@ -32,7 +32,7 @@ public class MongoDbEventStorePersistence(
     IEventStoreMetrics? mayBeMetrics,
     ILogger<MongoDbEventStorePersistence>? logger = null,
     MongoEventStoreOptions? options = null)
-    : IEventStorePersistence
+    : IEventStorePersistence, IAtomicOutboxAppend
 {
     const string Source = "mongodb-events";
 
@@ -52,9 +52,40 @@ public class MongoDbEventStorePersistence(
         var daos = events.Select(CreateDao).ToList();
 
         if (_transactional)
-            await AppendTransactionalAsync<TAggregate, TId>(id, expectedVersion, lastVersion, daos, cancellationToken);
+            await AppendTransactionalAsync<TAggregate, TId>(id, expectedVersion, lastVersion, daos, null, cancellationToken);
         else
             await AppendTwoStepAsync<TAggregate, TId>(id, expectedVersion, lastVersion, daos, cancellationToken);
+
+        sw.Stop();
+        _metrics.IncrementWrite<TAggregate>(Source);
+        _metrics.RecordWrite<TAggregate>(Source, sw.Elapsed.TotalSeconds);
+    }
+
+    /// <summary>
+    /// Atomic with the events only in transactional mode (<c>UseTransactions()</c>, replica
+    /// set) and with the MongoDB outbox. Without transactions two collections cannot be
+    /// written atomically; the event store then enqueues right after the append.
+    /// </summary>
+    public bool SupportsAtomicAppend(IOutboxPersistence outbox)
+        => _transactional && outbox is MongoDbOutboxPersistence;
+
+    public async Task AppendEventsWithOutboxAsync<TAggregate, TId>(TId id, int expectedVersion, ICollection<EventEnvelope<TAggregate, TId>> events,
+        IReadOnlyCollection<OutboxEnvelope> outboxEnvelopes, IOutboxPersistence outbox, CancellationToken cancellationToken = default)
+        where TAggregate : AggregateRoot<TAggregate, TId>, IEntity<TId>, new()
+    {
+        if (!SupportsAtomicAppend(outbox))
+            throw new InvalidOperationException("Atomic outbox appends require UseTransactions() and the MongoDB outbox (UseMongoOutbox).");
+
+        if (events.Count == 0)
+            return;
+
+        var sw = Stopwatch.StartNew();
+        var lastVersion = expectedVersion + events.Count;
+        var daos = events.Select(CreateDao).ToList();
+        var outboxDaos = outboxEnvelopes.Select(MongoDbOutboxPersistence.CreateDao).ToList();
+
+        await AppendTransactionalAsync<TAggregate, TId>(id, expectedVersion, lastVersion, daos,
+            (((MongoDbOutboxPersistence)outbox).CollectionName, outboxDaos), cancellationToken);
 
         sw.Stop();
         _metrics.IncrementWrite<TAggregate>(Source);
@@ -95,7 +126,8 @@ public class MongoDbEventStorePersistence(
         }
     }
 
-    private async Task AppendTransactionalAsync<TAggregate, TId>(TId id, int expectedVersion, int lastVersion, List<EventEnvelopeDao<TId>> daos, CancellationToken cancellationToken)
+    private async Task AppendTransactionalAsync<TAggregate, TId>(TId id, int expectedVersion, int lastVersion, List<EventEnvelopeDao<TId>> daos,
+        (string Collection, List<OutboxDao> Documents)? outbox, CancellationToken cancellationToken)
         where TAggregate : AggregateRoot<TAggregate, TId>, IEntity<TId>, new()
     {
         using var session = await dbContext.Client.StartSessionAsync(cancellationToken: cancellationToken);
@@ -107,6 +139,12 @@ public class MongoDbEventStorePersistence(
 
             await GetEventCollection<TAggregate, TId>()
                 .InsertManyAsync(session, daos, new InsertManyOptions { IsOrdered = true }, cancellationToken);
+
+            // Outbox envelopes in the same transaction. The collection comes from this
+            // persistence's own context: a session is only valid on the client that started it.
+            if (outbox is { Documents.Count: > 0 } o)
+                await dbContext.GetCollection<OutboxDao>(o.Collection)
+                    .InsertManyAsync(session, o.Documents, new InsertManyOptions { IsOrdered = true }, cancellationToken);
 
             await session.CommitTransactionAsync(cancellationToken);
         }

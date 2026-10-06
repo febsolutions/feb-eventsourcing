@@ -90,11 +90,16 @@ sufficient** — `UseTransactions()` executes the version compare-and-set and th
 event insert of every append in one multi-document transaction. No intermediate
 state can be observed or left behind, whatever fails in between; the self-heal
 described above remains active but becomes a pure safety net (it still repairs
-states left over from before the switch). On a standalone server this option makes
-every append fail — it is strictly opt-in and the two-step protocol stays the
-default. The outbox enqueue happens after the append and is not part of the
-transaction (same at-least-once contract as all other providers, see
-[outbox.md](outbox.md)).
+states left over from before the switch). With `UseMongoOutbox()` the outbox
+envelopes are part of the same transaction, so a stored event always has its envelope.
+On a standalone server this option makes every append fail — it is strictly opt-in and
+the two-step protocol stays the default.
+
+**The outbox without a replica set:** the envelopes are written immediately after the
+events, in one batch, and before the projections — but not atomically with them. If
+the process dies between the two writes, or the outbox write fails, those events are
+stored without envelopes and are not delivered. This is an accepted limitation of
+running without a replica set (see [outbox.md](outbox.md#1-why-an-outbox-at-all)).
 
 What neither mode gives you: atomicity across *different* aggregates. One
 `SaveAsync` = one aggregate = one batch. If a use case must change two aggregates

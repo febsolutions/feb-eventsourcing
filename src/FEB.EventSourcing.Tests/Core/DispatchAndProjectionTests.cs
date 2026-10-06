@@ -44,6 +44,8 @@ public class DispatchAndProjectionTests
 
         sp.GetServices<ISyncEventHandler<OrderCreated>>().Should().ContainSingle();
         sp.GetServices<IASyncEventHandler<OrderCreated>>().Should().ContainSingle();
-        sp.GetServices<IAggregateProjectionWriter<Order>>().Should().ContainSingle();
+        // Several writers per aggregate are allowed; each must be registered exactly once.
+        sp.GetServices<IAggregateProjectionWriter<Order>>().Select(w => w.GetType())
+            .Should().OnlyHaveUniqueItems().And.Contain(typeof(OrderProjectionWriter));
     }
 }

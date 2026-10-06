@@ -13,7 +13,7 @@ public static class EventRecorder
     public static ConcurrentBag<string> ProjectedAggregates { get; } = [];
 }
 
-/// <summary>Wird von AddEventSourcing per Assembly-Scan registriert (synchroner Pfad).</summary>
+/// <summary>Registered by the AddEventSourcing assembly scan (synchronous path).</summary>
 public sealed class SyncOrderCreatedHandler : ISyncEventHandler<OrderCreated>
 {
     public Task HandleAsync(OrderCreated @event, EventHandlingContext context, CancellationToken cancellationToken)
@@ -23,7 +23,7 @@ public sealed class SyncOrderCreatedHandler : ISyncEventHandler<OrderCreated>
     }
 }
 
-/// <summary>Wird von AddEventSourcing per Assembly-Scan registriert (Outbox-Pfad).</summary>
+/// <summary>Registered by the AddEventSourcing assembly scan (outbox path).</summary>
 public sealed class AsyncOrderCreatedHandler : IASyncEventHandler<OrderCreated>
 {
     public Task HandleAsync(OrderCreated @event, EventHandlingContext context, CancellationToken cancellationToken)
@@ -33,7 +33,7 @@ public sealed class AsyncOrderCreatedHandler : IASyncEventHandler<OrderCreated>
     }
 }
 
-/// <summary>Wird von AddEventSourcing per Assembly-Scan registriert (Projection-Pfad).</summary>
+/// <summary>Registered by the AddEventSourcing assembly scan (projection path).</summary>
 public sealed class OrderProjectionWriter : IAggregateProjectionWriter<Order>
 {
     public Task UpdateAsync(Order aggregate, ProjectionContext context, CancellationToken cancellationToken)
@@ -51,4 +51,18 @@ public sealed class AsyncOrderRenamedHandler : IASyncEventHandler<OrderRenamed>
         EventRecorder.AsyncHandled.Add(@event.Customer);
         return Task.CompletedTask;
     }
+}
+
+/// <summary>
+/// Read model that fails for marked customers only. Proves that a failing projection
+/// does not suppress outbox delivery of events that are already stored.
+/// </summary>
+public sealed class FailingOrderProjectionWriter : IAggregateProjectionWriter<Order>
+{
+    public const string FailMarker = "projection-fails-";
+
+    public Task UpdateAsync(Order aggregate, ProjectionContext context, CancellationToken cancellationToken)
+        => aggregate.Customer.StartsWith(FailMarker, StringComparison.Ordinal)
+            ? throw new InvalidOperationException("read model unavailable")
+            : Task.CompletedTask;
 }
