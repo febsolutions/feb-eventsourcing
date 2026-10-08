@@ -136,7 +136,7 @@ Redis (CAS, TTL) the framework's own suite uses Testcontainers; copy the fixture
 public sealed class MongoDbFixture : IAsyncLifetime
 {
     private readonly MongoDbContainer _container =
-        new MongoDbBuilder().WithImage("mongo:8").WithReplicaSet().Build();
+        new MongoDbBuilder("mongo:8").WithReplicaSet().Build();
 
     public string GetConnectionString(string database)
         => new MongoUrlBuilder(_container.GetConnectionString())
@@ -196,7 +196,7 @@ unless the snapshot source generator reaches the application through the package
 dependencies. CI runs it on every change, and the release workflow publishes only
 packages that passed it.
 
-Current coverage (2026-10-06, `./scripts/coverage.sh`):
+Current coverage (2026-10-08, `./scripts/coverage.sh`):
 
 | Package | Line | Branch | Method |
 |---|---|---|---|
@@ -205,14 +205,14 @@ Current coverage (2026-10-06, `./scripts/coverage.sh`):
 | FEB.EventSourcing.SqlServer | 100 % | 83.3 % | 100 % |
 | FEB.EventSourcing.InMemory | 94.7 % | 85.0 % | 100 % |
 | FEB.EventSourcing.Abstractions | 91.2 % | 89.7 % | 86.4 % |
-| FEB.EventSourcing.MongoDb | 90.6 % | 80.9 % | 93.2 % |
+| FEB.EventSourcing.MongoDb | 90.5 % | 79.8 % | 93.2 % |
 | FEB.EventSourcing.Snapshots.Generator | 87.7 % | 75.0 % | 100 % |
 | FEB.EventSourcing.Sql | 86.8 % | 77.2 % | 83.8 % |
 | FEB.EventSourcing | 85.9 % | 81.3 % | 91.1 % |
 | FEB.EventSourcing.Snapshots | 85.7 % | 78.1 % | 90.0 % |
 | FEB.EventSourcing.Redis | 83.7 % | 68.2 % | 91.5 % |
 | FEB.EventSourcing.TestKit | 78.8 % | 75.8 % | 85.7 % |
-| **Total** | **88.2 %** | **78.4 %** | **90.3 %** |
+| **Total** | **88.2 %** | **78.2 %** | **90.3 %** |
 
 `FEB.EventSourcing.Metrics` and `FEB.Cqrs` are outside the gate's include filter
 (`[FEB.EventSourcing*]*`); `FEB.Cqrs` has its own dispatcher tests. What the suite

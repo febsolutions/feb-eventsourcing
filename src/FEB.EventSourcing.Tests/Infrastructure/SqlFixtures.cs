@@ -16,7 +16,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         _connectionString = Environment.GetEnvironmentVariable("ES_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(_connectionString))
-            _container = new PostgreSqlBuilder().WithImage("postgres:16-alpine").Build();
+            _container = new PostgreSqlBuilder("postgres:16-alpine").Build();
     }
 
     public string ConnectionString => _connectionString!;
@@ -49,7 +49,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
     {
         _connectionString = Environment.GetEnvironmentVariable("ES_TEST_SQLSERVER");
         if (string.IsNullOrWhiteSpace(_connectionString))
-            _container = new MsSqlBuilder().WithImage("mcr.microsoft.com/mssql/server:2022-latest").Build();
+            _container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest").Build();
     }
 
     public string ConnectionString => _connectionString!;
