@@ -26,7 +26,7 @@ public sealed class MongoDbFixture : IAsyncLifetime
         if (string.IsNullOrWhiteSpace(_externalBase))
         {
             _externalBase = null;
-            _container = new MongoDbBuilder().WithImage("mongo:8").WithReplicaSet().Build();
+            _container = new MongoDbBuilder("mongo:8").WithReplicaSet().Build();
         }
     }
 

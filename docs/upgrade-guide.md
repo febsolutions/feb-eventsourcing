@@ -1,5 +1,16 @@
 # Upgrade guide
 
+## 9.3.1
+
+No code changes. `FEB.EventSourcing.MongoDb` now depends on **MongoDB.Driver 3.12.0**
+(previously 3.5.2). The older driver pulled in `Snappier` 1.0.0 and `SharpCompress`
+0.30.1, both with published security advisories
+([GHSA-pggp-6c3x-2xmx](https://github.com/advisories/GHSA-pggp-6c3x-2xmx),
+[GHSA-6c8g-7p36-r338](https://github.com/advisories/GHSA-6c8g-7p36-r338)); 3.12.0
+references fixed versions. If your application references `MongoDB.Driver` directly
+with a lower version, raise it to at least 3.12.0 — otherwise NuGet reports a package
+downgrade (NU1605).
+
 ## 9.3.0
 
 No action is required to upgrade. Two changes are worth knowing:

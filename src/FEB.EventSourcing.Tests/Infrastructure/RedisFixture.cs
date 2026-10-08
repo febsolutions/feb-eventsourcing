@@ -15,7 +15,7 @@ public sealed class RedisFixture : IAsyncLifetime
     {
         _connectionString = Environment.GetEnvironmentVariable("ES_TEST_REDIS");
         if (string.IsNullOrWhiteSpace(_connectionString))
-            _container = new RedisBuilder().WithImage("redis:8-alpine").Build();
+            _container = new RedisBuilder("redis:8-alpine").Build();
     }
 
     public string ConnectionString => _connectionString!;

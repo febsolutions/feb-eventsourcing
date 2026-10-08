@@ -24,6 +24,14 @@
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
+  <!-- NuGet audit covers transitive packages too (the .NET 10 SDK default only applies to
+       net10.0 projects). A vulnerable package pulled in by a dependency reaches every
+       application that uses ours, so it must show up in our build. -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+  </PropertyGroup>
+
   <!-- Every package ships its README for the nuget.org page. -->
   <PropertyGroup Condition="Exists('$(MSBuildProjectDirectory)/README.md')">
     <PackageReadmeFile>README.md</PackageReadmeFile>
