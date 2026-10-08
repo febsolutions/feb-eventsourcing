@@ -9,4 +9,9 @@ VERSION="${1:-0.0.0-smoke.$(date +%s)}"
 rm -rf artifacts/packages artifacts/consumer-packages tests/PackageConsumer/bin tests/PackageConsumer/obj
 
 dotnet pack FEB.EventSourcing.sln -c Release -o artifacts/packages -p:Version="$VERSION"
-dotnet run --project tests/PackageConsumer -c Release -p:FebVersion="$VERSION"
+# Once per target framework the packages ship for (FebTargetFrameworks in Directory.Build.props).
+FRAMEWORKS="$(dotnet msbuild tests/PackageConsumer -getProperty:TargetFrameworks -p:FebVersion="$VERSION")"
+for FRAMEWORK in ${FRAMEWORKS//;/ }; do
+  echo "--- PackageConsumer on $FRAMEWORK"
+  dotnet run --project tests/PackageConsumer -c Release -f "$FRAMEWORK" -p:FebVersion="$VERSION"
+done

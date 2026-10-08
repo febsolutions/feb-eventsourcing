@@ -24,7 +24,7 @@ dotnet add package FEB.EventSourcing.MongoDb      # or .Postgres / .SqlServer / 
 
 Add `FEB.EventSourcing.Snapshots` for snapshots and `FEB.EventSourcing.Redis` for the
 state cache; the snapshot source generator is included and needs no extra setup.
-The packages target .NET 8.
+The packages target .NET 8 and .NET 10.
 
 ## Choosing a persistence
 
@@ -75,7 +75,7 @@ services.AddEventSourcing(es =>
 
 ## Development
 
-Requirements: the .NET 8 SDK (or newer) and Docker — the integration tests start
+Requirements: the .NET 10 SDK, the .NET 8 runtime and Docker — the integration tests start
 MongoDB, Redis, PostgreSQL and SQL Server through Testcontainers.
 
 ```bash

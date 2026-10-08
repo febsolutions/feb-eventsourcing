@@ -1,5 +1,12 @@
 # Upgrade guide
 
+## 9.4.0
+
+No action is required. The packages now contain assets for **.NET 8 and .NET 10**
+(`lib/net8.0`, `lib/net10.0`); NuGet picks the matching one. Applications on .NET 8 are
+unaffected. Removing .NET 8 will be a major release with its own entry here
+([decision 0017](decisions/0017-target-frameworks.md)).
+
 ## 9.3.1
 
 No code changes. `FEB.EventSourcing.MongoDb` now depends on **MongoDB.Driver 3.12.0**

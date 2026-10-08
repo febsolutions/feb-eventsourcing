@@ -6,9 +6,10 @@ correct and its documentation trustworthy.
 
 ## Getting started
 
-Requirements: the .NET 8 SDK (or newer) and Docker. The integration tests start
-MongoDB (as a single-node replica set), Redis, PostgreSQL and SQL Server through
-Testcontainers; nothing else needs to be installed.
+Requirements: the .NET 10 SDK (pinned in `global.json`), the .NET 8 runtime and Docker.
+The packages target `net8.0` and `net10.0`, and the suite runs once for each. The
+integration tests start MongoDB (as a single-node replica set), Redis, PostgreSQL and
+SQL Server through Testcontainers; nothing else needs to be installed.
 
 ```bash
 dotnet build FEB.EventSourcing.sln

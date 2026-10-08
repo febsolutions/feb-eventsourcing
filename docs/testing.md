@@ -184,19 +184,22 @@ pattern including the multi-subscriber partial-failure case.
 
 ## 6. Test coverage
 
-The framework suite (`src/FEB.EventSourcing.Tests`, 229 tests) is measured with
-Coverlet and gated at **85 % line coverage**: locally via `scripts/coverage.sh`,
-in CI in the test step of the GitHub Actions workflow (same Coverlet threshold).
+The framework suite (`src/FEB.EventSourcing.Tests`, 229 tests) runs once per target
+framework (`net8.0` and `net10.0`). Each run is measured with Coverlet and gated at
+**85 % line coverage** (`coverage/coverage.<framework>.cobertura.xml`): locally via
+`scripts/coverage.sh`, in CI in the test step of the GitHub Actions workflow (same
+Coverlet threshold).
 
 Unit and integration tests build against project references, so they cannot see
 packaging defects. `scripts/package-smoke-test.sh` closes that gap: it packs every
 package into a local feed and builds and runs `tests/PackageConsumer`, an application
 that references only `FEB.EventSourcing.Postgres` and uses `[AutoSnapshot]` — it fails
 unless the snapshot source generator reaches the application through the package
-dependencies. CI runs it on every change, and the release workflow publishes only
+dependencies. It runs once per target framework. CI runs it on every change, and the release workflow publishes only
 packages that passed it.
 
-Current coverage (2026-10-08, `./scripts/coverage.sh`):
+Current coverage (2026-10-08, `./scripts/coverage.sh`, `net8.0` run; the `net10.0` run
+matches it except TestKit at 78.2 % line):
 
 | Package | Line | Branch | Method |
 |---|---|---|---|
