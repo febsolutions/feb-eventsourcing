@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFrameworks>$(FebTargetFrameworks)</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
 		<Description>Event sourcing for .NET: event store with optimistic concurrency, projections, sync and async event handlers, a transactional outbox with named subscribers, and an ordered decorator chain for snapshots and caching.</Description>

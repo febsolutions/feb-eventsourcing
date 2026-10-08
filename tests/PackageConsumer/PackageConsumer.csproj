@@ -4,7 +4,8 @@
        Deliberately not part of FEB.EventSourcing.sln. Run via scripts/package-smoke-test.sh. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Both frameworks the packages ship for: each must get the generator and work. -->
+    <TargetFrameworks>$(FebTargetFrameworks)</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>

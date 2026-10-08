@@ -22,9 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # SDK 10 builds (global.json); the 8.0 runtime runs the net8.0 tests.
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Restore
         run: dotnet restore FEB.EventSourcing.sln
@@ -34,6 +37,7 @@ jobs:
 
       # The integration tests start MongoDB (single-node replica set), Redis, PostgreSQL
       # and SQL Server through Testcontainers; Docker is available on GitHub-hosted runners.
+      # The suite runs once per target framework; the gate applies to each run.
       - name: Test (coverage gate 85 % line)
         run: >
           dotnet test src/FEB.EventSourcing.Tests/FEB.EventSourcing.Tests.csproj

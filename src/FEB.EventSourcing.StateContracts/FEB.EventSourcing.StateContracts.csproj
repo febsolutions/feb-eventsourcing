@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFrameworks>$(FebTargetFrameworks)</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <Description>Aggregate state contracts shared by snapshotting and caching ([AutoSnapshot], [IgnoreSnapshot], snapshot metadata and serializers). Includes the fail-closed snapshot source generator.</Description>

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFrameworks>$(FebTargetFrameworks)</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
 		<Description>Redis aggregate-state cache for FEB.EventSourcing: cache-aside and write-through with version-checked (compare-and-set) writes and invalidation on conflicts.</Description>

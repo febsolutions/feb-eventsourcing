@@ -24,6 +24,13 @@
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
+  <!-- Target frameworks of every package (and of the test suite, which runs once per
+       framework). net8.0 stays until no supported application needs it — dropping it is
+       a major release; see docs/decisions/0017-target-frameworks.md. -->
+  <PropertyGroup>
+    <FebTargetFrameworks>net8.0;net10.0</FebTargetFrameworks>
+  </PropertyGroup>
+
   <!-- NuGet audit covers transitive packages too (the .NET 10 SDK default only applies to
        net10.0 projects). A vulnerable package pulled in by a dependency reaches every
        application that uses ours, so it must show up in our build. -->
